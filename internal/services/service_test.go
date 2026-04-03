@@ -214,7 +214,7 @@ func TestPublishReturnsErrorWhenSubscriberQueueIsFull(t *testing.T) {
 		t.Fatalf("Subscribe returned error: %v", err)
 	}
 
-	for i := 0; i < 3; i++ {
+	for i := 0; i < defaultQueueCapacity; i++ {
 		if err := ps.Publish("orders", "created"); err != nil {
 			t.Fatalf("Publish returned error before queue was full: %v", err)
 		}
@@ -234,7 +234,7 @@ func TestPublishQueueFullDeliversToNoSubscribers(t *testing.T) {
 		}
 	}
 
-	for i := 0; i < 3; i++ {
+	for i := 0; i < defaultQueueCapacity; i++ {
 		if err := ps.Publish("orders", "created"); err != nil {
 			t.Fatalf("Publish returned error before queue was full: %v", err)
 		}
@@ -252,8 +252,8 @@ func TestPublishQueueFullDeliversToNoSubscribers(t *testing.T) {
 		subscription string
 		remaining    int
 	}{
-		{subscription: "alpha", remaining: 3},
-		{subscription: "beta", remaining: 2},
+		{subscription: "alpha", remaining: defaultQueueCapacity},
+		{subscription: "beta", remaining: defaultQueueCapacity - 1},
 	} {
 		for i := 0; i < tc.remaining; i++ {
 			msg, err := ps.Consume("orders", tc.subscription)
@@ -267,6 +267,24 @@ func TestPublishQueueFullDeliversToNoSubscribers(t *testing.T) {
 		if _, err := ps.Consume("orders", tc.subscription); err == nil {
 			t.Fatalf("expected no overflow message to be delivered to %s", tc.subscription)
 		}
+	}
+}
+
+func TestNewPubSubUsesCustomQueueSizeWhenProvided(t *testing.T) {
+	ps := NewPubSub(2)
+	mustCreateTopic(t, ps, "orders")
+	if err := ps.Subscribe("orders", "alpha"); err != nil {
+		t.Fatalf("Subscribe returned error: %v", err)
+	}
+
+	for i := 0; i < 2; i++ {
+		if err := ps.Publish("orders", "created"); err != nil {
+			t.Fatalf("Publish returned error before queue was full: %v", err)
+		}
+	}
+
+	if err := ps.Publish("orders", "overflow"); err == nil {
+		t.Fatal("expected publish to fail when custom subscriber queue is full")
 	}
 }
 

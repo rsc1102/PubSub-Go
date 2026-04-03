@@ -2,6 +2,8 @@
 
 This project is an in-memory Pub/Sub (Publish/Subscribe) message broker implemented in Go (Golang). The broker supports a fan-out model for topic-based message delivery. Communication with the message broker is facilitated through a REST API, making it accessible and easy to integrate with other services. Messages are enqueued independently for each subscriber. Publishing uses all-or-nothing delivery: if any subscriber queue is full, the publish request fails and the message is not enqueued for any subscriber.
 
+By default, each subscription has a queue capacity of `10` messages. Code that embeds the service directly can override this by constructing it with `services.NewPubSub(customCapacity)`.
+
 ![fan-out](.github/images/fan-out.png)
 
 ## Getting Started

@@ -22,14 +22,23 @@ type Subscription struct {
 }
 
 type PubSub struct {
-	mutex  sync.RWMutex
-	topics map[string]map[string]chan string
+	mutex         sync.RWMutex
+	topics        map[string]map[string]chan string
+	queueCapacity int
 }
 
+const defaultQueueCapacity = 10
+
 // NewPubSub creates a new PubSub instance
-func NewPubSub() *PubSub {
+func NewPubSub(args ...int) *PubSub {
+	queueCapacity := defaultQueueCapacity
+	if len(args) > 0 && args[0] > 0 {
+		queueCapacity = args[0]
+	}
+
 	return &PubSub{
-		topics: make(map[string]map[string]chan string),
+		topics:        make(map[string]map[string]chan string),
+		queueCapacity: queueCapacity,
 	}
 }
 
@@ -134,7 +143,7 @@ func (ps *PubSub) Subscribe(topic string, subscription string) error {
 		return errors.New("subscription already exists: " + normalizedSubscription)
 	}
 
-	ch := make(chan string, 3) // Buffered channel with a capacity of 10
+	ch := make(chan string, ps.queueCapacity)
 	innerMap[normalizedSubscription] = ch
 	return nil
 }
