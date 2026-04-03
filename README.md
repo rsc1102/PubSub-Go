@@ -60,15 +60,27 @@ In another terminal:
 k6 run loadtest/e2e.js
 ```
 
-Optional environment variables let you tune the target and scenario sizes:
+Optional environment variables let you tune the target, scenario sizes, and durations:
 
 ```bash
 BASE_URL=http://localhost:8080 \
 CREATE_TOPIC_VUS=2 \
 CREATE_SUBSCRIPTION_VUS=2 \
 PUBLISH_DELIVERY_VUS=10 \
+CREATE_TOPIC_DURATION=10s \
+CREATE_SUBSCRIPTION_DURATION=10s \
+PUBLISH_DELIVERY_DURATION=15s \
 k6 run loadtest/e2e.js
 ```
+
+Supported `k6` environment variables:
+- `BASE_URL`: target server URL. Default: `http://localhost:8080`
+- `CREATE_TOPIC_VUS`: number of virtual users for the `create_topics` scenario. Default: `2`
+- `CREATE_SUBSCRIPTION_VUS`: number of virtual users for the `create_subscriptions` scenario. Default: `2`
+- `PUBLISH_DELIVERY_VUS`: number of virtual users for the `publish_delivery` scenario. Default: `10`
+- `CREATE_TOPIC_DURATION`: duration of the `create_topics` scenario. Default: `10s`
+- `CREATE_SUBSCRIPTION_DURATION`: duration of the `create_subscriptions` scenario. Default: `10s`
+- `PUBLISH_DELIVERY_DURATION`: duration of the `publish_delivery` scenario. Default: `15s`
 
 The included `k6` script covers these request/response scenarios:
 - `create_topics`: measures end-to-end topic creation throughput.
