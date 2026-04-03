@@ -4,7 +4,14 @@ This project is an in-memory Pub/Sub (Publish/Subscribe) message broker implemen
 
 By default, each subscription has a queue capacity of `10` messages. When running the HTTP server, you can override this with the `-queue-size` flag, for example `go run main.go -queue-size 100`. Code that embeds the service directly can override it by constructing the broker with `services.NewPubSub(customCapacity)`.
 
-![fan-out](.github/images/fan-out.png)
+```mermaid
+flowchart TD
+    Publisher --> Topic
+    Topic --> SubscriptionA[Subscription A]
+    Topic --> SubscriptionB[Subscription B]
+    SubscriptionA --> SubscriberA[Subscriber A]
+    SubscriptionB --> SubscriberB[Subscriber B]
+```
 
 ## Getting Started
 ### Prerequisites
