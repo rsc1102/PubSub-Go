@@ -114,6 +114,21 @@ func TestPublishEndpointRequiresExistingTopic(t *testing.T) {
 	}
 }
 
+func TestPublishEndpointRejectsTopicWithoutSubscriptions(t *testing.T) {
+	router := newTestRouter()
+	ps = services.NewPubSub()
+	mustCreateTopicHTTP(t, "orders")
+
+	resp := performJSONRequest(t, router, http.MethodPost, "/publish", map[string]string{
+		"topic":   "orders",
+		"content": "created",
+	})
+
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, resp.Code)
+	}
+}
+
 func TestPublishEndpointReturnsTooManyRequestsForFullSubscriptionQueues(t *testing.T) {
 	router := newTestRouter()
 	ps = services.NewPubSub(1)

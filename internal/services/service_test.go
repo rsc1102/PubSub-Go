@@ -1,6 +1,7 @@
 package services
 
 import (
+	"errors"
 	"slices"
 	"testing"
 )
@@ -18,6 +19,21 @@ func TestCreateTopicAndGetTopics(t *testing.T) {
 	}
 	if topics[0] != "orders" {
 		t.Fatalf("expected topic %q, got %q", "orders", topics[0])
+	}
+}
+
+func TestGetTopicsReturnsSortedTopics(t *testing.T) {
+	ps := NewPubSub()
+	for _, topic := range []string{"payments", "orders", "audit"} {
+		if err := ps.CreateTopic(topic); err != nil {
+			t.Fatalf("CreateTopic(%q) returned error: %v", topic, err)
+		}
+	}
+
+	topics := ps.GetTopics()
+	want := []string{"audit", "orders", "payments"}
+	if !slices.Equal(topics, want) {
+		t.Fatalf("expected topics %v, got %v", want, topics)
 	}
 }
 
@@ -129,6 +145,11 @@ func TestGetSubscriptionsByTopicAndAllTopics(t *testing.T) {
 	if len(allSubscriptions) != 2 {
 		t.Fatalf("expected subscriptions for 2 topics, got %d", len(allSubscriptions))
 	}
+	gotAllOrders := allSubscriptions["orders"]
+	wantAllOrders := []string{"alpha", "beta"}
+	if !slices.Equal(gotAllOrders, wantAllOrders) {
+		t.Fatalf("expected sorted orders subscriptions %v, got %v", wantAllOrders, gotAllOrders)
+	}
 }
 
 func TestUnsubscribeRemovesSubscription(t *testing.T) {
@@ -222,6 +243,19 @@ func TestPublishReturnsErrorWhenSubscriberQueueIsFull(t *testing.T) {
 
 	if err := ps.Publish("orders", "overflow"); err == nil {
 		t.Fatal("expected publish to fail when subscriber queue is full")
+	}
+}
+
+func TestPublishReturnsErrorWhenTopicHasNoSubscriptions(t *testing.T) {
+	ps := NewPubSub()
+	mustCreateTopic(t, ps, "orders")
+
+	err := ps.Publish("orders", "created")
+	if err == nil {
+		t.Fatal("expected publish to fail when topic has no subscriptions")
+	}
+	if !errors.Is(err, ErrTopicHasNoSubscriptions) {
+		t.Fatalf("expected ErrTopicHasNoSubscriptions, got %v", err)
 	}
 }
 

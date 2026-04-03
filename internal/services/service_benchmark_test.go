@@ -45,14 +45,24 @@ func BenchmarkConsume(b *testing.B) {
 
 func BenchmarkPublishParallel(b *testing.B) {
 	ps := NewPubSub()
-	mustCreateTopicBenchmark(b, ps, "orders")
+	workerTopics := runtime.GOMAXPROCS(0) * 4
+	for i := 0; i < workerTopics; i++ {
+		topic := fmt.Sprintf("orders-%d", i)
+		mustCreateTopicBenchmark(b, ps, topic)
+		for sub := 0; sub < 100; sub++ {
+			mustSubscribeBenchmark(b, ps, topic, fmt.Sprintf("sub-%d", sub))
+		}
+	}
 
+	var seq atomic.Uint64
 	b.ResetTimer()
 	b.RunParallel(func(pb *testing.PB) {
+		topic := fmt.Sprintf("orders-%d", (seq.Add(1)-1)%uint64(workerTopics))
 		for pb.Next() {
-			if err := ps.Publish("orders", "created"); err != nil {
-				b.Fatalf("Publish returned error: %v", err)
+			if err := ps.Publish(topic, "created"); err != nil {
+				b.Fatalf("Publish(%q) returned error: %v", topic, err)
 			}
+			drainAllSubscriptions(b, ps, topic, 100)
 		}
 	})
 }

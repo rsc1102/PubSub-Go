@@ -3,11 +3,13 @@ package services
 import (
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 )
 
 var ErrSubscriptionsHaveFullQueues = errors.New("message not delivered because subscriptions have full queues")
+var ErrTopicHasNoSubscriptions = errors.New("message not delivered because topic has no subscriptions")
 
 type Topic struct {
 	Topic string `json:"topic"`
@@ -57,6 +59,7 @@ func (ps *PubSub) GetTopics() []string {
 	for key := range ps.topics {
 		keys = append(keys, key)
 	}
+	slices.Sort(keys)
 	return keys
 }
 
@@ -109,6 +112,7 @@ func (ps *PubSub) GetSubscriptions(topic string) (map[string][]string, error) {
 			for sub := range subscriptions {
 				subscriptionsMap[t] = append(subscriptionsMap[t], sub)
 			}
+			slices.Sort(subscriptionsMap[t])
 		}
 		return subscriptionsMap, nil
 	}
@@ -121,6 +125,7 @@ func (ps *PubSub) GetSubscriptions(topic string) (map[string][]string, error) {
 		for sub := range subscriptions {
 			subscriptionsMap[normalizedTopic] = append(subscriptionsMap[normalizedTopic], sub)
 		}
+		slices.Sort(subscriptionsMap[normalizedTopic])
 		return subscriptionsMap, nil
 	}
 
@@ -179,6 +184,9 @@ func (ps *PubSub) Publish(topic, msg string) error {
 	subscriptions, ok := ps.topics[normalizedTopic]
 	if !ok {
 		return errors.New("topic not found: " + normalizedTopic)
+	}
+	if len(subscriptions) == 0 {
+		return fmt.Errorf("%w: %s", ErrTopicHasNoSubscriptions, normalizedTopic)
 	}
 
 	fullSubscriptions := []string{}
