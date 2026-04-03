@@ -1,8 +1,10 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"pubsub-go/internal/services"
 
@@ -10,6 +12,10 @@ import (
 )
 
 var ps = services.NewPubSub()
+
+func Initialize(queueSize int) {
+	ps = services.NewPubSub(queueSize)
+}
 
 func HealthCheck(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
@@ -37,7 +43,7 @@ func CreateTopic(c *gin.Context) {
 		})
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"message": fmt.Sprintf("Created topic: %s", newTopic.Topic)})
+	c.JSON(http.StatusCreated, gin.H{"message": fmt.Sprintf("Created topic: %s", strings.TrimSpace(newTopic.Topic))})
 }
 
 func DeleteTopic(c *gin.Context) {
@@ -100,7 +106,16 @@ func PublishMessage(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	ps.Publish(newMessage.Topic, newMessage.Content)
+	if err := ps.Publish(newMessage.Topic, newMessage.Content); err != nil {
+		status := http.StatusBadRequest
+		if errors.Is(err, services.ErrSubscriptionsHaveFullQueues) {
+			status = http.StatusTooManyRequests
+		}
+		c.JSON(status, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
 	c.JSON(http.StatusCreated, newMessage)
 }
 

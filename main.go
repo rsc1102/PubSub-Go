@@ -1,7 +1,9 @@
 package main
 
 import (
+	"flag"
 	"fmt"
+	"log"
 
 	"pubsub-go/api/handlers"
 
@@ -9,6 +11,14 @@ import (
 )
 
 func main() {
+	queueSize := flag.Int("queue-size", 10, "queue capacity per subscription")
+	flag.Parse()
+
+	if *queueSize <= 0 {
+		log.Fatal("queue-size must be greater than 0")
+	}
+
+	handlers.Initialize(*queueSize)
 
 	app := gin.Default()
 
@@ -23,6 +33,6 @@ func main() {
 	app.POST("/consume", handlers.ConsumeMessage)
 
 	// Run the server
-	fmt.Println("starting app...")
+	fmt.Printf("starting app with queue size %d...\n", *queueSize)
 	app.Run(":8080") // Default port is 8080
 }

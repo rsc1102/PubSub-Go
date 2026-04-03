@@ -2,9 +2,14 @@ package services
 
 import (
 	"errors"
-	"log"
+	"fmt"
+	"slices"
+	"strings"
 	"sync"
 )
+
+var ErrSubscriptionsHaveFullQueues = errors.New("message not delivered because subscriptions have full queues")
+var ErrTopicHasNoSubscriptions = errors.New("message not delivered because topic has no subscriptions")
 
 type Topic struct {
 	Topic string `json:"topic"`
@@ -21,15 +26,28 @@ type Subscription struct {
 }
 
 type PubSub struct {
-	mutex  sync.RWMutex
-	topics map[string]map[string]chan string
+	mutex         sync.RWMutex
+	topics        map[string]map[string]chan string
+	queueCapacity int
 }
 
+const defaultQueueCapacity = 10
+
 // NewPubSub creates a new PubSub instance
-func NewPubSub() *PubSub {
-	return &PubSub{
-		topics: make(map[string]map[string]chan string),
+func NewPubSub(args ...int) *PubSub {
+	queueCapacity := defaultQueueCapacity
+	if len(args) > 0 && args[0] > 0 {
+		queueCapacity = args[0]
 	}
+
+	return &PubSub{
+		topics:        make(map[string]map[string]chan string),
+		queueCapacity: queueCapacity,
+	}
+}
+
+func normalizeName(value string) string {
+	return strings.TrimSpace(value)
 }
 
 // Get all topics
@@ -41,6 +59,7 @@ func (ps *PubSub) GetTopics() []string {
 	for key := range ps.topics {
 		keys = append(keys, key)
 	}
+	slices.Sort(keys)
 	return keys
 }
 
@@ -49,12 +68,17 @@ func (ps *PubSub) CreateTopic(topic string) error {
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
 
-	if _, exists := ps.topics[topic]; !exists && topic != "" {
-		ps.topics[topic] = make(map[string]chan string)
-		return nil
-	} else {
-		return errors.New("topic already exists:" + topic)
+	normalizedTopic := normalizeName(topic)
+	if normalizedTopic == "" {
+		return errors.New("topic name cannot be empty")
 	}
+
+	if _, exists := ps.topics[normalizedTopic]; exists {
+		return errors.New("topic already exists: " + normalizedTopic)
+	}
+
+	ps.topics[normalizedTopic] = make(map[string]chan string)
+	return nil
 }
 
 // Delete a topic
@@ -62,12 +86,16 @@ func (ps *PubSub) DeleteTopic(topic string) {
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
 
+	normalizedTopic := normalizeName(topic)
 	subscriptions, ok := ps.topics[topic]
+	if !ok {
+		subscriptions, ok = ps.topics[normalizedTopic]
+	}
 	if ok {
 		for _, ch := range subscriptions {
 			close(ch)
 		}
-		delete(ps.topics, topic)
+		delete(ps.topics, normalizedTopic)
 	}
 }
 
@@ -77,24 +105,27 @@ func (ps *PubSub) GetSubscriptions(topic string) (map[string][]string, error) {
 	defer ps.mutex.RUnlock()
 
 	subscriptionsMap := map[string][]string{}
-	if topic == "" {
+	normalizedTopic := normalizeName(topic)
+	if normalizedTopic == "" {
 		for t, subscriptions := range ps.topics {
 			subscriptionsMap[t] = []string{}
 			for sub := range subscriptions {
 				subscriptionsMap[t] = append(subscriptionsMap[t], sub)
 			}
+			slices.Sort(subscriptionsMap[t])
 		}
 		return subscriptionsMap, nil
 	}
 
-	subscriptions, ok := ps.topics[topic]
+	subscriptions, ok := ps.topics[normalizedTopic]
 	if !ok {
-		return nil, errors.New("topic not found: " + topic)
+		return nil, errors.New("topic not found: " + normalizedTopic)
 	} else {
-		subscriptionsMap[topic] = []string{}
+		subscriptionsMap[normalizedTopic] = []string{}
 		for sub := range subscriptions {
-			subscriptionsMap[topic] = append(subscriptionsMap[topic], sub)
+			subscriptionsMap[normalizedTopic] = append(subscriptionsMap[normalizedTopic], sub)
 		}
+		slices.Sort(subscriptionsMap[normalizedTopic])
 		return subscriptionsMap, nil
 	}
 
@@ -105,13 +136,22 @@ func (ps *PubSub) Subscribe(topic string, subscription string) error {
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
 
-	innerMap, ok := ps.topics[topic]
-	if !ok {
-		return errors.New("topic not found: " + topic)
+	normalizedTopic := normalizeName(topic)
+	normalizedSubscription := normalizeName(subscription)
+	if normalizedSubscription == "" {
+		return errors.New("subscription name cannot be empty")
 	}
 
-	ch := make(chan string, 3) // Buffered channel with a capacity of 10
-	innerMap[subscription] = ch
+	innerMap, ok := ps.topics[normalizedTopic]
+	if !ok {
+		return errors.New("topic not found: " + normalizedTopic)
+	}
+	if _, exists := innerMap[normalizedSubscription]; exists {
+		return errors.New("subscription already exists: " + normalizedSubscription)
+	}
+
+	ch := make(chan string, ps.queueCapacity)
+	innerMap[normalizedSubscription] = ch
 	return nil
 }
 
@@ -120,34 +160,51 @@ func (ps *PubSub) Unsubscribe(topic string, subscription string) error {
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
 
-	innerMap, ok := ps.topics[topic]
+	normalizedTopic := normalizeName(topic)
+	normalizedSubscription := normalizeName(subscription)
+	innerMap, ok := ps.topics[normalizedTopic]
 	if !ok {
-		return errors.New("topic not found: " + topic)
+		return errors.New("topic not found: " + normalizedTopic)
 	}
-	channel, ok := innerMap[subscription]
+	channel, ok := innerMap[normalizedSubscription]
 	if !ok {
-		return errors.New("subscription not found: " + subscription)
+		return errors.New("subscription not found: " + normalizedSubscription)
 	}
 	close(channel)
-	delete(innerMap, subscription)
+	delete(innerMap, normalizedSubscription)
 	return nil
 }
 
 // Publish sends a message to all subscriptions of a specific topic
-func (ps *PubSub) Publish(topic, msg string) {
+func (ps *PubSub) Publish(topic, msg string) error {
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
 
-	subscriptions, ok := ps.topics[topic]
-	if ok {
-		for sub, ch := range subscriptions {
-			select {
-			case ch <- msg:
-			default:
-				log.Printf("Skipping publishing message to subscription %s as channel is full\n", sub)
-			}
+	normalizedTopic := normalizeName(topic)
+	subscriptions, ok := ps.topics[normalizedTopic]
+	if !ok {
+		return errors.New("topic not found: " + normalizedTopic)
+	}
+	if len(subscriptions) == 0 {
+		return fmt.Errorf("%w: %s", ErrTopicHasNoSubscriptions, normalizedTopic)
+	}
+
+	fullSubscriptions := []string{}
+	for sub, ch := range subscriptions {
+		if len(ch) == cap(ch) {
+			fullSubscriptions = append(fullSubscriptions, sub)
 		}
 	}
+
+	if len(fullSubscriptions) > 0 {
+		return fmt.Errorf("%w: %s", ErrSubscriptionsHaveFullQueues, strings.Join(fullSubscriptions, ", "))
+	}
+
+	for _, ch := range subscriptions {
+		ch <- msg
+	}
+
+	return nil
 }
 
 // Consume lets a subscription consume the first message in the queue
@@ -155,13 +212,15 @@ func (ps *PubSub) Consume(topic string, subscription string) (string, error) {
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
 
-	innerMap, ok := ps.topics[topic]
+	normalizedTopic := normalizeName(topic)
+	normalizedSubscription := normalizeName(subscription)
+	innerMap, ok := ps.topics[normalizedTopic]
 	if !ok {
-		return "", errors.New("topic not found: " + topic)
+		return "", errors.New("topic not found: " + normalizedTopic)
 	}
-	channel, ok := innerMap[subscription]
+	channel, ok := innerMap[normalizedSubscription]
 	if !ok {
-		return "", errors.New("subscription not found: " + subscription)
+		return "", errors.New("subscription not found: " + normalizedSubscription)
 	}
 
 	select {
