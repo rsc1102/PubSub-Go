@@ -15,6 +15,58 @@ Go version 1.23.1 or higher.
 2. Install dependencies: ```go mod tidy```
 3. Run the application: ```go run main.go```
 
+### Benchmarks
+Run the service-layer benchmarks with:
+
+```bash
+go test ./internal/services -run '^$' -bench .
+```
+
+The benchmark suite covers:
+- `BenchmarkPublish`: publish cost as subscriber fan-out grows.
+- `BenchmarkConsume`: steady-state cost of consuming from a subscription.
+- `BenchmarkPublishParallel`: concurrent publish throughput against the shared broker state.
+- `BenchmarkPublishConsumeParallel`: concurrent publish and consume throughput across sharded topics.
+
+Run the HTTP handler benchmarks with:
+
+```bash
+go test ./api/handlers -run '^$' -bench .
+```
+
+These benchmarks measure in-process API execution time through the Gin router, including request binding, handler execution, and broker calls for:
+- `BenchmarkCreateTopicEndpoint`
+- `BenchmarkCreateSubscriptionEndpoint`
+- `BenchmarkPublishEndpoint`
+- `BenchmarkConsumeEndpoint`
+
+Run the end-to-end HTTP benchmarks with `k6` against a running server:
+
+```bash
+go run main.go
+```
+
+In another terminal:
+
+```bash
+k6 run loadtest/e2e.js
+```
+
+Optional environment variables let you tune the target and scenario sizes:
+
+```bash
+BASE_URL=http://localhost:8080 \
+CREATE_TOPIC_VUS=2 \
+CREATE_SUBSCRIPTION_VUS=2 \
+PUBLISH_CONSUME_VUS=10 \
+k6 run loadtest/e2e.js
+```
+
+The `k6` script includes these scenarios:
+- `create_topics`: measures end-to-end topic creation throughput.
+- `create_subscriptions`: measures topic creation plus subscription creation throughput.
+- `publish_consume`: measures publish and consume round-trips using one dedicated topic/subscription per VU.
+
 ## API Endpoints
 The message broker provides the following REST API endpoints:
 
@@ -42,8 +94,15 @@ The message broker provides the following REST API endpoints:
 ├── go.mod                 # Module definition file
 ├── go.sum                 # Dependency checksum file
 ├── main.go                # Entry point of the application
+├── README.md              # Project documentation
 ├── api/handlers/          # Contains API handler
-│   └── handler.go         # API handler
-└── internal/services/     # Contains internal service logic
-    └── service.go         # Service implementation
+│   ├── handler.go         # API handler
+│   ├── handler_test.go    # HTTP handler tests
+│   └── handler_benchmark_test.go # HTTP handler benchmarks
+├── internal/services/     # Contains internal service logic
+│   ├── service.go         # Service implementation
+│   ├── service_test.go    # Service tests
+│   └── service_benchmark_test.go # Service benchmarks
+└── loadtest/
+    └── e2e.js             # k6 end-to-end benchmark script
 ```
