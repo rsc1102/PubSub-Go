@@ -3,7 +3,6 @@ package services
 import (
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 	"sync"
 )
@@ -173,16 +172,17 @@ func (ps *PubSub) Publish(topic, msg string) error {
 
 	fullSubscriptions := []string{}
 	for sub, ch := range subscriptions {
-		select {
-		case ch <- msg:
-		default:
-			log.Printf("Skipping publishing message to subscription %s as channel is full\n", sub)
+		if len(ch) == cap(ch) {
 			fullSubscriptions = append(fullSubscriptions, sub)
 		}
 	}
 
 	if len(fullSubscriptions) > 0 {
-		return fmt.Errorf("message not delivered to subscriptions with full queues: %s", strings.Join(fullSubscriptions, ", "))
+		return fmt.Errorf("message not delivered because subscriptions have full queues: %s", strings.Join(fullSubscriptions, ", "))
+	}
+
+	for _, ch := range subscriptions {
+		ch <- msg
 	}
 
 	return nil

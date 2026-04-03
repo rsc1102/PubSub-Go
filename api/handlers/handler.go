@@ -3,6 +3,7 @@ package handlers
 import (
 	"fmt"
 	"net/http"
+	"strings"
 
 	"pubsub-go/internal/services"
 
@@ -37,7 +38,7 @@ func CreateTopic(c *gin.Context) {
 		})
 		return
 	}
-	c.JSON(http.StatusCreated, gin.H{"message": fmt.Sprintf("Created topic: %s", newTopic.Topic)})
+	c.JSON(http.StatusCreated, gin.H{"message": fmt.Sprintf("Created topic: %s", strings.TrimSpace(newTopic.Topic))})
 }
 
 func DeleteTopic(c *gin.Context) {

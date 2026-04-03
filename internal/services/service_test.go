@@ -225,6 +225,51 @@ func TestPublishReturnsErrorWhenSubscriberQueueIsFull(t *testing.T) {
 	}
 }
 
+func TestPublishQueueFullDeliversToNoSubscribers(t *testing.T) {
+	ps := NewPubSub()
+	mustCreateTopic(t, ps, "orders")
+	for _, subscription := range []string{"alpha", "beta"} {
+		if err := ps.Subscribe("orders", subscription); err != nil {
+			t.Fatalf("Subscribe(%q) returned error: %v", subscription, err)
+		}
+	}
+
+	for i := 0; i < 3; i++ {
+		if err := ps.Publish("orders", "created"); err != nil {
+			t.Fatalf("Publish returned error before queue was full: %v", err)
+		}
+	}
+
+	if _, err := ps.Consume("orders", "beta"); err != nil {
+		t.Fatalf("expected beta consume before saturation check to succeed, got %v", err)
+	}
+
+	if err := ps.Publish("orders", "overflow"); err == nil {
+		t.Fatal("expected publish to fail when any subscriber queue is full")
+	}
+
+	for _, tc := range []struct {
+		subscription string
+		remaining    int
+	}{
+		{subscription: "alpha", remaining: 3},
+		{subscription: "beta", remaining: 2},
+	} {
+		for i := 0; i < tc.remaining; i++ {
+			msg, err := ps.Consume("orders", tc.subscription)
+			if err != nil {
+				t.Fatalf("Consume(%q) returned error: %v", tc.subscription, err)
+			}
+			if msg != "created" {
+				t.Fatalf("expected queued message %q for %s, got %q", "created", tc.subscription, msg)
+			}
+		}
+		if _, err := ps.Consume("orders", tc.subscription); err == nil {
+			t.Fatalf("expected no overflow message to be delivered to %s", tc.subscription)
+		}
+	}
+}
+
 func TestSubscribeTrimsTopicNameLikeCreateTopic(t *testing.T) {
 	ps := NewPubSub()
 	mustCreateTopic(t, ps, " orders ")

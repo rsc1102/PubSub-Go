@@ -1,6 +1,6 @@
 # PubSub Go
 
-This project is an in-memory Pub/Sub (Publish/Subscribe) message broker implemented in Go (Golang). The broker supports a fan-out model for topic-based message delivery, ensuring that messages published to a topic are delivered to all subscribers of that topic. Communication with the message broker is facilitated through a REST API, making it accessible and easy to integrate with other services.
+This project is an in-memory Pub/Sub (Publish/Subscribe) message broker implemented in Go (Golang). The broker supports a fan-out model for topic-based message delivery. Communication with the message broker is facilitated through a REST API, making it accessible and easy to integrate with other services. Messages are enqueued independently for each subscriber. Publishing uses all-or-nothing delivery: if any subscriber queue is full, the publish request fails and the message is not enqueued for any subscriber.
 
 ![fan-out](.github/images/fan-out.png)
 
@@ -16,7 +16,7 @@ Go version 1.23.1 or higher.
 ## API Endpoints
 The message broker provides the following REST API endpoints:
 
-1. `GET /ping` : Returns `PONG` if server is active.
+1. `GET /ping` : Returns `{ "message": "pong" }` if server is active.
 2. `POST /topics`: Creates a topic. 
    - JSON schema: ``` { "topic" : "topic1"}```
 3. `DELETE /topics`: Deletes a topic
@@ -29,6 +29,7 @@ The message broker provides the following REST API endpoints:
 7. `GET /subscriptions`: Returns all subscriptions for a topic if it is provided, else returns all subscriptions for all topics. 
 8. `POST /publish`: Publishes message to a topic.
    - JSON schema: ```{ "topic": "topic1", "content": "msg" }```
+   - Behavior: message delivery is all-or-nothing across subscriptions for the topic. If any subscription queue is full, the request returns an error and no subscription receives the message.
 9. `POST /consume`: Consumes a message from a subscription.
     - JSON schema: ```{ "topic": "topic1", "subscription": "alpha" }```
    
@@ -44,5 +45,3 @@ The message broker provides the following REST API endpoints:
 └── internal/services/     # Contains internal service logic
     └── service.go         # Service implementation
 ```
-
-
