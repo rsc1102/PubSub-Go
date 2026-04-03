@@ -1,8 +1,8 @@
 # PubSub Go
 
-This project is an in-memory Pub/Sub message broker written in Go. It uses a fan-out model for topic-based delivery and exposes a REST API for integration. Messages are queued separately for each subscriber. Publishing is all-or-nothing: it succeeds only if the topic exists, has at least one subscription, and every subscriber queue has room. If any queue is full, the publish fails and nothing is enqueued.
+This project is an in-memory Pub/Sub message broker written in Go. It uses a fan-out model for topic-based delivery and exposes an HTTP API for integration. Each subscription has a buffered delivery channel, and subscribers receive messages over a long-lived Server-Sent Events (SSE) stream. Publishing is fire-and-forget across subscriptions for a topic: subscribers with available buffer space receive the message, while full subscriber buffers silently drop that publish attempt.
 
-Each subscription defaults to a queue capacity of `10` messages. When running the HTTP server, override it with `-queue-size`, for example `go run main.go -queue-size 100`. If you embed the service directly, pass a custom capacity to `services.NewPubSub(...)`.
+Each subscription defaults to a buffer capacity of `10` messages. When running the HTTP server, override it with `-queue-size`, for example `go run main.go -queue-size 100`. If you embed the service directly, pass a custom capacity to `services.NewPubSub(...)`.
 
 ```mermaid
 flowchart TD
@@ -32,7 +32,7 @@ go test ./internal/services -run '^$' -bench .
 
 The benchmark suite covers:
 - `BenchmarkPublish`: publish cost as subscriber fan-out grows.
-- `BenchmarkConsume`: steady-state cost of consuming from a subscription.
+- `BenchmarkConsume`: steady-state cost of draining a subscription buffer directly from the service layer.
 - `BenchmarkPublishParallel`: concurrent publish throughput against the shared broker state.
 - `BenchmarkPublishConsumeParallel`: concurrent publish and consume throughput across sharded topics.
 
@@ -46,7 +46,7 @@ These benchmarks measure in-process API execution time through the Gin router, i
 - `BenchmarkCreateTopicEndpoint`
 - `BenchmarkCreateSubscriptionEndpoint`
 - `BenchmarkPublishEndpoint`
-- `BenchmarkConsumeEndpoint`
+- `BenchmarkStreamEndpointFirstEvent`
 
 Run the end-to-end HTTP benchmarks with `k6` against a running server:
 
@@ -60,20 +60,34 @@ In another terminal:
 k6 run loadtest/e2e.js
 ```
 
-Optional environment variables let you tune the target and scenario sizes:
+Optional environment variables let you tune the target, scenario sizes, and durations:
 
 ```bash
 BASE_URL=http://localhost:8080 \
 CREATE_TOPIC_VUS=2 \
 CREATE_SUBSCRIPTION_VUS=2 \
-PUBLISH_CONSUME_VUS=10 \
+PUBLISH_DELIVERY_VUS=10 \
+CREATE_TOPIC_DURATION=10s \
+CREATE_SUBSCRIPTION_DURATION=10s \
+PUBLISH_DELIVERY_DURATION=15s \
 k6 run loadtest/e2e.js
 ```
 
-The `k6` script includes these scenarios:
+Supported `k6` environment variables:
+- `BASE_URL`: target server URL. Default: `http://localhost:8080`
+- `CREATE_TOPIC_VUS`: number of virtual users for the `create_topics` scenario. Default: `2`
+- `CREATE_SUBSCRIPTION_VUS`: number of virtual users for the `create_subscriptions` scenario. Default: `2`
+- `PUBLISH_DELIVERY_VUS`: number of virtual users for the `publish_delivery` scenario. Default: `10`
+- `CREATE_TOPIC_DURATION`: duration of the `create_topics` scenario. Default: `10s`
+- `CREATE_SUBSCRIPTION_DURATION`: duration of the `create_subscriptions` scenario. Default: `10s`
+- `PUBLISH_DELIVERY_DURATION`: duration of the `publish_delivery` scenario. Default: `15s`
+
+The included `k6` script covers these request/response scenarios:
 - `create_topics`: measures end-to-end topic creation throughput.
 - `create_subscriptions`: measures topic creation plus subscription creation throughput.
-- `publish_consume`: measures publish and consume round-trips using one dedicated topic/subscription per VU.
+- `publish_delivery`: measures fire-and-forget publish throughput using one dedicated topic/subscription per VU.
+
+The broker now delivers subscriber messages over `GET /stream` using SSE. Benchmarking streamed delivery requires a streaming-capable client and is not covered by the current `k6` script.
 
 ## API Endpoints
 The message broker provides the following REST API endpoints:
@@ -91,9 +105,11 @@ The message broker provides the following REST API endpoints:
 7. `GET /subscriptions`: Returns all subscriptions for a topic if it is provided, else returns all subscriptions for all topics. 
 8. `POST /publish`: Publishes message to a topic.
    - JSON schema: ```{ "topic": "topic1", "content": "msg" }```
-   - Behavior: message delivery is all-or-nothing across subscriptions for the topic. Publishing fails if the topic does not exist, if the topic has no subscriptions, or if any subscription queue is full. In all failure cases, no subscription receives the message.
-9. `POST /consume`: Consumes a message from a subscription.
-    - JSON schema: ```{ "topic": "topic1", "subscription": "alpha" }```
+   - Behavior: delivery is fire-and-forget across subscriptions for the topic. Publishing fails only if the topic does not exist or has no subscriptions. If some subscriber buffers are full, those subscriptions silently drop the message and the request still succeeds.
+9. `GET /stream`: Opens an SSE stream for a subscription.
+   - Query string: ```?topic=topic1&subscription=alpha```
+   - Event payload: ```event: message``` with JSON data ```{ "topic": "topic1", "subscription": "alpha", "content": "msg" }```
+   - Notes: the connection stays open and the server pushes each published message as it arrives.
    
 ## Project Structure
 

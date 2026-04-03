@@ -8,8 +8,8 @@ import (
 	"sync"
 )
 
-var ErrSubscriptionsHaveFullQueues = errors.New("message not delivered because subscriptions have full queues")
 var ErrTopicHasNoSubscriptions = errors.New("message not delivered because topic has no subscriptions")
+var ErrSubscriptionClosed = errors.New("subscription closed")
 
 type Topic struct {
 	Topic string `json:"topic"`
@@ -175,7 +175,7 @@ func (ps *PubSub) Unsubscribe(topic string, subscription string) error {
 	return nil
 }
 
-// Publish sends a message to all subscriptions of a specific topic
+// Publish sends a message to every subscription with available buffer space.
 func (ps *PubSub) Publish(topic, msg string) error {
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
@@ -189,45 +189,31 @@ func (ps *PubSub) Publish(topic, msg string) error {
 		return fmt.Errorf("%w: %s", ErrTopicHasNoSubscriptions, normalizedTopic)
 	}
 
-	fullSubscriptions := []string{}
-	for sub, ch := range subscriptions {
-		if len(ch) == cap(ch) {
-			fullSubscriptions = append(fullSubscriptions, sub)
-		}
-	}
-
-	if len(fullSubscriptions) > 0 {
-		return fmt.Errorf("%w: %s", ErrSubscriptionsHaveFullQueues, strings.Join(fullSubscriptions, ", "))
-	}
-
 	for _, ch := range subscriptions {
+		if len(ch) == cap(ch) {
+			continue
+		}
 		ch <- msg
 	}
 
 	return nil
 }
 
-// Consume lets a subscription consume the first message in the queue
-func (ps *PubSub) Consume(topic string, subscription string) (string, error) {
-	ps.mutex.Lock()
-	defer ps.mutex.Unlock()
+// SubscriptionStream returns the buffered delivery channel for a subscription.
+func (ps *PubSub) SubscriptionStream(topic string, subscription string) (<-chan string, error) {
+	ps.mutex.RLock()
+	defer ps.mutex.RUnlock()
 
 	normalizedTopic := normalizeName(topic)
 	normalizedSubscription := normalizeName(subscription)
 	innerMap, ok := ps.topics[normalizedTopic]
 	if !ok {
-		return "", errors.New("topic not found: " + normalizedTopic)
+		return nil, errors.New("topic not found: " + normalizedTopic)
 	}
 	channel, ok := innerMap[normalizedSubscription]
 	if !ok {
-		return "", errors.New("subscription not found: " + normalizedSubscription)
+		return nil, errors.New("subscription not found: " + normalizedSubscription)
 	}
 
-	select {
-	case msg := <-channel:
-		return msg, nil
-	default:
-		return "", errors.New("message queue empty")
-	}
-
+	return channel, nil
 }

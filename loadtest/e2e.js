@@ -7,15 +7,13 @@ const baseURL = __ENV.BASE_URL || 'http://localhost:8080';
 
 const createTopicVUs = Number(__ENV.CREATE_TOPIC_VUS || 2);
 const createSubscriptionVUs = Number(__ENV.CREATE_SUBSCRIPTION_VUS || 2);
-const publishConsumeVUs = Number(__ENV.PUBLISH_CONSUME_VUS || 10);
+const publishDeliveryVUs = Number(__ENV.PUBLISH_DELIVERY_VUS || 10);
 const totalScenarioVUs =
-  createTopicVUs + createSubscriptionVUs + publishConsumeVUs;
+  createTopicVUs + createSubscriptionVUs + publishDeliveryVUs;
 
 const publishSuccess = new Rate('publish_success');
-const consumeSuccess = new Rate('consume_success');
-const messageMatch = new Rate('message_match');
-const publishConsumeE2ELatency = new Trend('publish_consume_e2e_latency', true);
-const publishBackpressure = new Counter('publish_backpressure');
+const publishResponseMatch = new Rate('publish_response_match');
+const publishDeliveryLatency = new Trend('publish_delivery_latency', true);
 const publishTopicMissing = new Counter('publish_topic_missing');
 const publishUnexpectedFailure = new Counter('publish_unexpected_failure');
 
@@ -33,29 +31,28 @@ export const options = {
       vus: createSubscriptionVUs,
       duration: __ENV.CREATE_SUBSCRIPTION_DURATION || '10s',
     },
-    publish_consume: {
+    publish_delivery: {
       executor: 'constant-vus',
-      exec: 'publishAndConsume',
-      vus: publishConsumeVUs,
-      duration: __ENV.PUBLISH_CONSUME_DURATION || '15s',
+      exec: 'publishFireAndForget',
+      vus: publishDeliveryVUs,
+      duration: __ENV.PUBLISH_DELIVERY_DURATION || '15s',
     },
   },
   thresholds: {
     http_req_duration: ['p(95)<200'],
     publish_success: ['rate>0.99'],
-    consume_success: ['rate>0.99'],
-    message_match: ['rate>0.99'],
+    publish_response_match: ['rate>0.99'],
   },
 };
 
 export function setup() {
   const runID = `run-${Date.now()}`;
 
-  // idInTest is global across scenarios, so pre-create enough publish/consume
+  // idInTest is global across scenarios, so pre-create enough publish/delivery
   // resources to cover the full VU id range used by this mixed-scenario run.
   for (let i = 1; i <= totalScenarioVUs; i++) {
-    const topic = `${runID}-pc-topic-${i}`;
-    const subscription = `${runID}-pc-sub-${i}`;
+    const topic = `${runID}-pd-topic-${i}`;
+    const subscription = `${runID}-pd-sub-${i}`;
 
     const createTopicResponse = postJSON('/topics', { topic });
     assertStatus(createTopicResponse, 201, 'setup create topic');
@@ -95,11 +92,10 @@ export function createSubscriptions(data) {
   assertStatus(createSubscriptionResponse, 201, 'create subscription');
 }
 
-export function publishAndConsume(data) {
+export function publishFireAndForget(data) {
   const vu = exec.vu.idInTest;
   const iter = exec.scenario.iterationInTest;
-  const topic = `${data.runID}-pc-topic-${vu}`;
-  const subscription = `${data.runID}-pc-sub-${vu}`;
+  const topic = `${data.runID}-pd-topic-${vu}`;
   const content = `${data.runID}-msg-${vu}-${iter}`;
   const startedAt = Date.now();
 
@@ -113,55 +109,32 @@ export function publishAndConsume(data) {
   if (!publishOK) {
     const body = safeJSON(publishResponse);
     const errorMessage = typeof body.error === 'string' ? body.error : '';
-    const isBackpressure =
-      publishResponse.status === 429 &&
-      errorMessage.includes('full queues');
     const isTopicMissing =
       publishResponse.status === 400 &&
       errorMessage.includes('topic not found');
 
-    if (isBackpressure) {
-      publishBackpressure.add(1);
-    }
     if (isTopicMissing) {
       publishTopicMissing.add(1);
     }
-    if (!isBackpressure && !isTopicMissing) {
+    if (!isTopicMissing) {
       publishUnexpectedFailure.add(1);
     }
 
     check(body, {
-      'publish failure is queue backpressure': (payload) => isBackpressure,
       'publish failure is missing topic': (payload) => isTopicMissing,
-      'publish failure is unexpected': (payload) =>
-        !isBackpressure && !isTopicMissing,
+      'publish failure is unexpected': () => !isTopicMissing,
     });
-    consumeSuccess.add(false);
-    messageMatch.add(false);
+    publishResponseMatch.add(false);
     return;
   }
 
-  const consumeResponse = postJSON('/consume', { topic, subscription });
-  const consumeOK = consumeResponse.status === 200;
-  consumeSuccess.add(consumeOK);
-  check(consumeResponse, {
-    'consume status is 200': (res) => res.status === 200,
-  });
-
-  if (!consumeOK) {
-    messageMatch.add(false);
-    return;
-  }
-
-  const body = safeJSON(consumeResponse);
+  const body = safeJSON(publishResponse);
   const matched = check(body, {
-    'consume returned expected message': (payload) => payload.message === content,
+    'publish echoed topic': (payload) => payload.topic === topic,
+    'publish echoed content': (payload) => payload.content === content,
   });
-  messageMatch.add(matched);
-
-  if (matched) {
-    publishConsumeE2ELatency.add(Date.now() - startedAt);
-  }
+  publishResponseMatch.add(matched);
+  publishDeliveryLatency.add(Date.now() - startedAt);
 }
 
 function postJSON(path, payload) {

@@ -30,7 +30,7 @@ func main() {
 	app.DELETE("/subscriptions", handlers.DeleteSubscription)
 	app.GET("/subscriptions", handlers.GetSubscriptions)
 	app.POST("/publish", handlers.PublishMessage)
-	app.POST("/consume", handlers.ConsumeMessage)
+	app.GET("/stream", handlers.StreamMessages)
 
 	// Run the server
 	fmt.Printf("starting app with queue size %d...\n", *queueSize)
