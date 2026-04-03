@@ -8,7 +8,6 @@ import (
 	"sync"
 )
 
-var ErrSubscriptionsHaveFullQueues = errors.New("message not delivered because subscriptions have full queues")
 var ErrTopicHasNoSubscriptions = errors.New("message not delivered because topic has no subscriptions")
 var ErrSubscriptionClosed = errors.New("subscription closed")
 
@@ -176,7 +175,7 @@ func (ps *PubSub) Unsubscribe(topic string, subscription string) error {
 	return nil
 }
 
-// Publish sends a message to all subscriptions of a specific topic
+// Publish sends a message to every subscription with available buffer space.
 func (ps *PubSub) Publish(topic, msg string) error {
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
@@ -190,18 +189,10 @@ func (ps *PubSub) Publish(topic, msg string) error {
 		return fmt.Errorf("%w: %s", ErrTopicHasNoSubscriptions, normalizedTopic)
 	}
 
-	fullSubscriptions := []string{}
-	for sub, ch := range subscriptions {
-		if len(ch) == cap(ch) {
-			fullSubscriptions = append(fullSubscriptions, sub)
-		}
-	}
-
-	if len(fullSubscriptions) > 0 {
-		return fmt.Errorf("%w: %s", ErrSubscriptionsHaveFullQueues, strings.Join(fullSubscriptions, ", "))
-	}
-
 	for _, ch := range subscriptions {
+		if len(ch) == cap(ch) {
+			continue
+		}
 		ch <- msg
 	}
 

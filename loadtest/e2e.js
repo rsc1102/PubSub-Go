@@ -12,8 +12,8 @@ const totalScenarioVUs =
   createTopicVUs + createSubscriptionVUs + publishDeliveryVUs;
 
 const publishSuccess = new Rate('publish_success');
+const publishResponseMatch = new Rate('publish_response_match');
 const publishDeliveryLatency = new Trend('publish_delivery_latency', true);
-const publishBackpressure = new Counter('publish_backpressure');
 const publishTopicMissing = new Counter('publish_topic_missing');
 const publishUnexpectedFailure = new Counter('publish_unexpected_failure');
 
@@ -33,7 +33,7 @@ export const options = {
     },
     publish_delivery: {
       executor: 'constant-vus',
-      exec: 'publishAndMeasureDeliveryBuffer',
+      exec: 'publishFireAndForget',
       vus: publishDeliveryVUs,
       duration: __ENV.PUBLISH_DELIVERY_DURATION || '15s',
     },
@@ -41,6 +41,7 @@ export const options = {
   thresholds: {
     http_req_duration: ['p(95)<200'],
     publish_success: ['rate>0.99'],
+    publish_response_match: ['rate>0.99'],
   },
 };
 
@@ -91,7 +92,7 @@ export function createSubscriptions(data) {
   assertStatus(createSubscriptionResponse, 201, 'create subscription');
 }
 
-export function publishAndMeasureDeliveryBuffer(data) {
+export function publishFireAndForget(data) {
   const vu = exec.vu.idInTest;
   const iter = exec.scenario.iterationInTest;
   const topic = `${data.runID}-pd-topic-${vu}`;
@@ -108,32 +109,31 @@ export function publishAndMeasureDeliveryBuffer(data) {
   if (!publishOK) {
     const body = safeJSON(publishResponse);
     const errorMessage = typeof body.error === 'string' ? body.error : '';
-    const isBackpressure =
-      publishResponse.status === 429 &&
-      errorMessage.includes('full queues');
     const isTopicMissing =
       publishResponse.status === 400 &&
       errorMessage.includes('topic not found');
 
-    if (isBackpressure) {
-      publishBackpressure.add(1);
-    }
     if (isTopicMissing) {
       publishTopicMissing.add(1);
     }
-    if (!isBackpressure && !isTopicMissing) {
+    if (!isTopicMissing) {
       publishUnexpectedFailure.add(1);
     }
 
     check(body, {
-      'publish failure is queue backpressure': (payload) => isBackpressure,
       'publish failure is missing topic': (payload) => isTopicMissing,
-      'publish failure is unexpected': (payload) =>
-        !isBackpressure && !isTopicMissing,
+      'publish failure is unexpected': () => !isTopicMissing,
     });
+    publishResponseMatch.add(false);
     return;
   }
 
+  const body = safeJSON(publishResponse);
+  const matched = check(body, {
+    'publish echoed topic': (payload) => payload.topic === topic,
+    'publish echoed content': (payload) => payload.content === content,
+  });
+  publishResponseMatch.add(matched);
   publishDeliveryLatency.add(Date.now() - startedAt);
 }
 

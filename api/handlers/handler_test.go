@@ -151,11 +151,12 @@ func TestPublishEndpointRejectsTopicWithoutSubscriptions(t *testing.T) {
 	}
 }
 
-func TestPublishEndpointReturnsTooManyRequestsForFullSubscriptionQueues(t *testing.T) {
+func TestPublishEndpointIgnoresFullSubscriberQueues(t *testing.T) {
 	router := newTestRouter()
 	ps = services.NewPubSub(1)
 	mustCreateTopicHTTP(t, "orders")
 	mustCreateSubscriptionHTTP(t, "orders", "alpha")
+	mustCreateSubscriptionHTTP(t, "orders", "beta")
 
 	firstResp := performJSONRequest(t, router, http.MethodPost, "/publish", map[string]string{
 		"topic":   "orders",
@@ -165,13 +166,52 @@ func TestPublishEndpointReturnsTooManyRequestsForFullSubscriptionQueues(t *testi
 		t.Fatalf("expected first publish status %d, got %d", http.StatusCreated, firstResp.Code)
 	}
 
+	stream, err := ps.SubscriptionStream("orders", "beta")
+	if err != nil {
+		t.Fatalf("SubscriptionStream returned error: %v", err)
+	}
+	if _, ok := <-stream; !ok {
+		t.Fatal("expected beta stream to remain open")
+	}
+
 	secondResp := performJSONRequest(t, router, http.MethodPost, "/publish", map[string]string{
 		"topic":   "orders",
 		"content": "created-again",
 	})
 
-	if secondResp.Code != http.StatusTooManyRequests {
-		t.Fatalf("expected status %d, got %d", http.StatusTooManyRequests, secondResp.Code)
+	if secondResp.Code != http.StatusCreated {
+		t.Fatalf("expected status %d, got %d", http.StatusCreated, secondResp.Code)
+	}
+
+	alphaStream, err := ps.SubscriptionStream("orders", "alpha")
+	if err != nil {
+		t.Fatalf("SubscriptionStream(alpha) returned error: %v", err)
+	}
+	select {
+	case msg := <-alphaStream:
+		if msg != "created" {
+			t.Fatalf("expected alpha to keep only the original message, got %q", msg)
+		}
+	default:
+		t.Fatal("expected alpha to still have the original queued message")
+	}
+	select {
+	case msg := <-alphaStream:
+		t.Fatalf("expected alpha to drop the second message, got %q", msg)
+	default:
+	}
+
+	betaStream, err := ps.SubscriptionStream("orders", "beta")
+	if err != nil {
+		t.Fatalf("SubscriptionStream(beta) returned error: %v", err)
+	}
+	select {
+	case msg := <-betaStream:
+		if msg != "created-again" {
+			t.Fatalf("expected beta to receive %q, got %q", "created-again", msg)
+		}
+	default:
+		t.Fatal("expected beta to receive the second published message")
 	}
 }
 

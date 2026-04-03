@@ -1,6 +1,6 @@
 # PubSub Go
 
-This project is an in-memory Pub/Sub message broker written in Go. It uses a fan-out model for topic-based delivery and exposes an HTTP API for integration. Each subscription has a buffered delivery channel, and subscribers receive messages over a long-lived Server-Sent Events (SSE) stream. Publishing is all-or-nothing: it succeeds only if the topic exists, has at least one subscription, and every subscriber buffer has room. If any buffer is full, the publish fails and nothing is enqueued.
+This project is an in-memory Pub/Sub message broker written in Go. It uses a fan-out model for topic-based delivery and exposes an HTTP API for integration. Each subscription has a buffered delivery channel, and subscribers receive messages over a long-lived Server-Sent Events (SSE) stream. Publishing is fire-and-forget across subscriptions for a topic: subscribers with available buffer space receive the message, while full subscriber buffers silently drop that publish attempt.
 
 Each subscription defaults to a buffer capacity of `10` messages. When running the HTTP server, override it with `-queue-size`, for example `go run main.go -queue-size 100`. If you embed the service directly, pass a custom capacity to `services.NewPubSub(...)`.
 
@@ -73,7 +73,7 @@ k6 run loadtest/e2e.js
 The included `k6` script covers these request/response scenarios:
 - `create_topics`: measures end-to-end topic creation throughput.
 - `create_subscriptions`: measures topic creation plus subscription creation throughput.
-- `publish_delivery`: measures publish throughput using one dedicated topic/subscription per VU.
+- `publish_delivery`: measures fire-and-forget publish throughput using one dedicated topic/subscription per VU.
 
 The broker now delivers subscriber messages over `GET /stream` using SSE. Benchmarking streamed delivery requires a streaming-capable client and is not covered by the current `k6` script.
 
@@ -93,7 +93,7 @@ The message broker provides the following REST API endpoints:
 7. `GET /subscriptions`: Returns all subscriptions for a topic if it is provided, else returns all subscriptions for all topics. 
 8. `POST /publish`: Publishes message to a topic.
    - JSON schema: ```{ "topic": "topic1", "content": "msg" }```
-   - Behavior: message delivery is all-or-nothing across subscriptions for the topic. Publishing fails if the topic does not exist, if the topic has no subscriptions, or if any subscription buffer is full. In all failure cases, no subscription receives the message.
+   - Behavior: delivery is fire-and-forget across subscriptions for the topic. Publishing fails only if the topic does not exist or has no subscriptions. If some subscriber buffers are full, those subscriptions silently drop the message and the request still succeeds.
 9. `GET /stream`: Opens an SSE stream for a subscription.
    - Query string: ```?topic=topic1&subscription=alpha```
    - Event payload: ```event: message``` with JSON data ```{ "topic": "topic1", "subscription": "alpha", "content": "msg" }```

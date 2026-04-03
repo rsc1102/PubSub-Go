@@ -75,7 +75,9 @@ func TestSubscribePublishAndConsume(t *testing.T) {
 		t.Fatalf("Subscribe returned error: %v", err)
 	}
 
-	ps.Publish("orders", "created")
+	if err := ps.Publish("orders", "created"); err != nil {
+		t.Fatalf("Publish returned error: %v", err)
+	}
 
 	msg := mustReadNextMessage(t, ps, "orders", "alpha")
 	if msg != "created" {
@@ -93,7 +95,9 @@ func TestPublishFansOutToAllSubscribers(t *testing.T) {
 		}
 	}
 
-	ps.Publish("orders", "created")
+	if err := ps.Publish("orders", "created"); err != nil {
+		t.Fatalf("Publish returned error: %v", err)
+	}
 
 	for _, subscription := range []string{"alpha", "beta"} {
 		msg := mustReadNextMessage(t, ps, "orders", subscription)
@@ -222,7 +226,7 @@ func TestSubscribeRejectsWhitespaceOnlySubscriptionName(t *testing.T) {
 	}
 }
 
-func TestPublishReturnsErrorWhenSubscriberQueueIsFull(t *testing.T) {
+func TestPublishIgnoresFullSubscriberQueues(t *testing.T) {
 	ps := NewPubSub()
 	mustCreateTopic(t, ps, "orders")
 	if err := ps.Subscribe("orders", "alpha"); err != nil {
@@ -235,8 +239,17 @@ func TestPublishReturnsErrorWhenSubscriberQueueIsFull(t *testing.T) {
 		}
 	}
 
-	if err := ps.Publish("orders", "overflow"); err == nil {
-		t.Fatal("expected publish to fail when subscriber queue is full")
+	if err := ps.Publish("orders", "overflow"); err != nil {
+		t.Fatalf("expected publish to ignore full queues, got %v", err)
+	}
+	for i := 0; i < defaultQueueCapacity; i++ {
+		msg := mustReadNextMessage(t, ps, "orders", "alpha")
+		if msg != "created" {
+			t.Fatalf("expected queued message %q, got %q", "created", msg)
+		}
+	}
+	if _, ok := readQueuedMessage(ps, "orders", "alpha"); ok {
+		t.Fatal("expected overflow message to be dropped when queue is full")
 	}
 }
 
@@ -253,7 +266,7 @@ func TestPublishReturnsErrorWhenTopicHasNoSubscriptions(t *testing.T) {
 	}
 }
 
-func TestPublishQueueFullDeliversToNoSubscribers(t *testing.T) {
+func TestPublishSkipsFullSubscribersAndDeliversToAvailableOnes(t *testing.T) {
 	ps := NewPubSub()
 	mustCreateTopic(t, ps, "orders")
 	for _, subscription := range []string{"alpha", "beta"} {
@@ -272,25 +285,25 @@ func TestPublishQueueFullDeliversToNoSubscribers(t *testing.T) {
 		t.Fatal("expected beta stream to have a queued message before saturation check")
 	}
 
-	if err := ps.Publish("orders", "overflow"); err == nil {
-		t.Fatal("expected publish to fail when any subscriber queue is full")
+	if err := ps.Publish("orders", "overflow"); err != nil {
+		t.Fatalf("expected publish to succeed, got %v", err)
 	}
 
 	for _, tc := range []struct {
 		subscription string
-		remaining    int
+		remaining    []string
 	}{
-		{subscription: "alpha", remaining: defaultQueueCapacity},
-		{subscription: "beta", remaining: defaultQueueCapacity - 1},
+		{subscription: "alpha", remaining: repeatMessage("created", defaultQueueCapacity)},
+		{subscription: "beta", remaining: append(repeatMessage("created", defaultQueueCapacity-1), "overflow")},
 	} {
-		for i := 0; i < tc.remaining; i++ {
+		for _, expected := range tc.remaining {
 			msg := mustReadNextMessage(t, ps, "orders", tc.subscription)
-			if msg != "created" {
-				t.Fatalf("expected queued message %q for %s, got %q", "created", tc.subscription, msg)
+			if msg != expected {
+				t.Fatalf("expected queued message %q for %s, got %q", expected, tc.subscription, msg)
 			}
 		}
 		if _, ok := readQueuedMessage(ps, "orders", tc.subscription); ok {
-			t.Fatalf("expected no overflow message to be delivered to %s", tc.subscription)
+			t.Fatalf("expected no additional message to be delivered to %s", tc.subscription)
 		}
 	}
 }
@@ -308,8 +321,17 @@ func TestNewPubSubUsesCustomQueueSizeWhenProvided(t *testing.T) {
 		}
 	}
 
-	if err := ps.Publish("orders", "overflow"); err == nil {
-		t.Fatal("expected publish to fail when custom subscriber queue is full")
+	if err := ps.Publish("orders", "overflow"); err != nil {
+		t.Fatalf("expected publish to ignore full queues, got %v", err)
+	}
+	for i := 0; i < 2; i++ {
+		msg := mustReadNextMessage(t, ps, "orders", "alpha")
+		if msg != "created" {
+			t.Fatalf("expected queued message %q, got %q", "created", msg)
+		}
+	}
+	if _, ok := readQueuedMessage(ps, "orders", "alpha"); ok {
+		t.Fatal("expected overflow message to be dropped when custom queue is full")
 	}
 }
 
@@ -392,4 +414,12 @@ func readQueuedMessage(ps *PubSub, topic, subscription string) (string, bool) {
 	default:
 		return "", false
 	}
+}
+
+func repeatMessage(msg string, count int) []string {
+	items := make([]string, count)
+	for i := range items {
+		items[i] = msg
+	}
+	return items
 }
