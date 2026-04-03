@@ -286,6 +286,48 @@ func TestStreamEndpointRejectsMissingQueryParameters(t *testing.T) {
 	}
 }
 
+func TestStreamEndpointEmitsErrorEventWhenSubscriptionCloses(t *testing.T) {
+	router := newTestRouter()
+	ps = services.NewPubSub()
+	mustCreateTopicHTTP(t, "orders")
+	mustCreateSubscriptionHTTP(t, "orders", "alpha")
+
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	streamResp, err := http.Get(server.URL + "/stream?topic=orders&subscription=alpha")
+	if err != nil {
+		t.Fatalf("opening stream failed: %v", err)
+	}
+	defer streamResp.Body.Close()
+
+	if streamResp.StatusCode != http.StatusOK {
+		t.Fatalf("expected stream status %d, got %d", http.StatusOK, streamResp.StatusCode)
+	}
+
+	if err := ps.Unsubscribe("orders", "alpha"); err != nil {
+		t.Fatalf("Unsubscribe returned error: %v", err)
+	}
+
+	eventName, rawEvent, err := readSSEFrame(streamResp.Body, 2*time.Second)
+	if err != nil {
+		t.Fatalf("reading SSE error event failed: %v", err)
+	}
+	if eventName != "error" {
+		t.Fatalf("expected SSE event %q, got %q", "error", eventName)
+	}
+
+	var event struct {
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal([]byte(rawEvent), &event); err != nil {
+		t.Fatalf("decoding SSE error payload failed: %v", err)
+	}
+	if event.Message != services.ErrSubscriptionClosed.Error() {
+		t.Fatalf("expected error message %q, got %q", services.ErrSubscriptionClosed.Error(), event.Message)
+	}
+}
+
 func TestDeleteSubscriptionEndpoint(t *testing.T) {
 	router := newTestRouter()
 	ps = services.NewPubSub()
@@ -364,19 +406,40 @@ func mustCreateSubscriptionHTTP(t *testing.T, topic, subscription string) {
 }
 
 func readSSEEvent(body io.Reader, timeout time.Duration) (string, error) {
+	_, data, err := readSSEFrame(body, timeout)
+	return data, err
+}
+
+func readSSEFrame(body io.Reader, timeout time.Duration) (string, string, error) {
 	reader := bufio.NewReader(body)
 	deadline := time.Now().Add(timeout)
+	eventName := ""
+	data := ""
 
 	for time.Now().Before(deadline) {
 		line, err := reader.ReadString('\n')
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
 
+		line = strings.TrimRight(line, "\r\n")
+		if line == "" {
+			if data != "" {
+				return eventName, data, nil
+			}
+			continue
+		}
+		if strings.HasPrefix(line, ":") {
+			continue
+		}
+		if strings.HasPrefix(line, "event: ") {
+			eventName = strings.TrimSpace(strings.TrimPrefix(line, "event: "))
+			continue
+		}
 		if strings.HasPrefix(line, "data: ") {
-			return strings.TrimSpace(strings.TrimPrefix(line, "data: ")), nil
+			data = strings.TrimSpace(strings.TrimPrefix(line, "data: "))
 		}
 	}
 
-	return "", fmt.Errorf("timed out waiting for SSE event")
+	return "", "", fmt.Errorf("timed out waiting for SSE event")
 }

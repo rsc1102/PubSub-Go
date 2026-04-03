@@ -1,3 +1,149 @@
-This file previously contained sample k6 output from the old polling-based `/consume` benchmark.
 
-The project now uses SSE delivery via `GET /stream`, and the current `loadtest/e2e.js` script measures publish-side HTTP behavior only.
+         /\      Grafana   /‾‾/  
+    /\  /  \     |\  __   /  /   
+   /  \/    \    | |/ /  /   ‾‾\ 
+  /          \   |   (  |  (‾)  |
+ / __________ \  |_|\_\  \_____/ 
+
+
+     execution: local
+        script: loadtest/e2e.js
+        output: -
+
+     scenarios: (100.00%) 3 scenarios, 14 max VUs, 45s max duration (incl. graceful stop):
+              * create_subscriptions: 2 looping VUs for 10s (exec: createSubscriptions, gracefulStop: 30s)
+              * create_topics: 2 looping VUs for 10s (exec: createTopics, gracefulStop: 30s)
+              * publish_delivery: 10 looping VUs for 15s (exec: publishFireAndForget, gracefulStop: 30s)
+
+
+running (01.0s), 14/14 VUs, 45432 complete and 0 interrupted iterations
+create_subscriptions   [  10% ] 2 VUs   01.0s/10s
+create_topics          [  10% ] 2 VUs   01.0s/10s
+publish_delivery       [   7% ] 10 VUs  01.0s/15s
+
+running (02.0s), 14/14 VUs, 102239 complete and 0 interrupted iterations
+create_subscriptions   [  20% ] 2 VUs   02.0s/10s
+create_topics          [  20% ] 2 VUs   02.0s/10s
+publish_delivery       [  13% ] 10 VUs  02.0s/15s
+
+running (03.0s), 14/14 VUs, 160041 complete and 0 interrupted iterations
+create_subscriptions   [  30% ] 2 VUs   03.0s/10s
+create_topics          [  30% ] 2 VUs   03.0s/10s
+publish_delivery       [  20% ] 10 VUs  03.0s/15s
+
+running (04.0s), 14/14 VUs, 219900 complete and 0 interrupted iterations
+create_subscriptions   [  40% ] 2 VUs   04.0s/10s
+create_topics          [  40% ] 2 VUs   04.0s/10s
+publish_delivery       [  27% ] 10 VUs  04.0s/15s
+
+running (05.0s), 14/14 VUs, 281354 complete and 0 interrupted iterations
+create_subscriptions   [  50% ] 2 VUs   05.0s/10s
+create_topics          [  50% ] 2 VUs   05.0s/10s
+publish_delivery       [  33% ] 10 VUs  05.0s/15s
+
+running (06.0s), 14/14 VUs, 342534 complete and 0 interrupted iterations
+create_subscriptions   [  60% ] 2 VUs   06.0s/10s
+create_topics          [  60% ] 2 VUs   06.0s/10s
+publish_delivery       [  40% ] 10 VUs  06.0s/15s
+
+running (07.0s), 14/14 VUs, 405512 complete and 0 interrupted iterations
+create_subscriptions   [  70% ] 2 VUs   07.0s/10s
+create_topics          [  70% ] 2 VUs   07.0s/10s
+publish_delivery       [  47% ] 10 VUs  07.0s/15s
+
+running (08.0s), 14/14 VUs, 468747 complete and 0 interrupted iterations
+create_subscriptions   [  80% ] 2 VUs   08.0s/10s
+create_topics          [  80% ] 2 VUs   08.0s/10s
+publish_delivery       [  53% ] 10 VUs  08.0s/15s
+
+running (09.0s), 14/14 VUs, 532219 complete and 0 interrupted iterations
+create_subscriptions   [  90% ] 2 VUs   09.0s/10s
+create_topics          [  90% ] 2 VUs   09.0s/10s
+publish_delivery       [  60% ] 10 VUs  09.0s/15s
+
+running (10.0s), 14/14 VUs, 596483 complete and 0 interrupted iterations
+create_subscriptions   [ 100% ] 2 VUs   10.0s/10s
+create_topics          [ 100% ] 2 VUs   10.0s/10s
+publish_delivery       [  67% ] 10 VUs  10.0s/15s
+
+running (11.0s), 10/14 VUs, 656797 complete and 0 interrupted iterations
+create_subscriptions ✓ [ 100% ] 2 VUs   10s
+create_topics        ✓ [ 100% ] 2 VUs   10s
+publish_delivery       [  73% ] 10 VUs  11.0s/15s
+
+running (12.0s), 10/14 VUs, 717707 complete and 0 interrupted iterations
+create_subscriptions ✓ [ 100% ] 2 VUs   10s
+create_topics        ✓ [ 100% ] 2 VUs   10s
+publish_delivery       [  80% ] 10 VUs  12.0s/15s
+
+running (13.0s), 10/14 VUs, 778683 complete and 0 interrupted iterations
+create_subscriptions ✓ [ 100% ] 2 VUs   10s
+create_topics        ✓ [ 100% ] 2 VUs   10s
+publish_delivery       [  87% ] 10 VUs  13.0s/15s
+
+running (14.0s), 10/14 VUs, 839518 complete and 0 interrupted iterations
+create_subscriptions ✓ [ 100% ] 2 VUs   10s
+create_topics        ✓ [ 100% ] 2 VUs   10s
+publish_delivery       [  93% ] 10 VUs  14.0s/15s
+
+running (15.0s), 10/14 VUs, 901747 complete and 0 interrupted iterations
+create_subscriptions ✓ [ 100% ] 2 VUs   10s
+create_topics        ✓ [ 100% ] 2 VUs   10s
+publish_delivery       [ 100% ] 10 VUs  15.0s/15s
+
+
+  █ THRESHOLDS 
+
+    http_req_duration
+    ✓ 'p(95)<200' p(95)=265µs
+
+    publish_response_match
+    ✓ 'rate>0.99' rate=100.00%
+
+    publish_success
+    ✓ 'rate>0.99' rate=100.00%
+
+
+  █ TOTAL RESULTS 
+
+    checks_total.......: 2453221 163488.959958/s
+    checks_succeeded...: 100.00% 2453221 out of 2453221
+    checks_failed......: 0.00%   0 out of 2453221
+
+    ✓ setup create topic status is 201
+    ✓ setup create subscription status is 201
+    ✓ publish status is 201
+    ✓ create topic for subscription status is 201
+    ✓ publish echoed topic
+    ✓ publish echoed content
+    ✓ create subscription status is 201
+    ✓ create topic status is 201
+
+    CUSTOM
+    publish_delivery_latency.......: avg=172.84µs min=0s      med=0s       max=31ms    p(90)=1ms      p(95)=1ms     
+    publish_response_match.........: 100.00% 748669 out of 748669
+    publish_success................: 100.00% 748669 out of 748669
+
+    HTTP
+    http_req_duration..............: avg=118.22µs min=20µs    med=92µs     max=25.89ms p(90)=198µs    p(95)=265µs   
+      { expected_response:true }...: avg=118.22µs min=20µs    med=92µs     max=25.89ms p(90)=198µs    p(95)=265µs   
+    http_req_failed................: 0.00%   0 out of 955883
+    http_reqs......................: 955883  63702.502755/s
+
+    EXECUTION
+    iteration_duration.............: avg=205.98µs min=44.16µs med=164.25µs max=30.89ms p(90)=329.45µs p(95)=431.87µs
+    iterations.....................: 902372  60136.392023/s
+    vus............................: 10      min=10               max=14
+    vus_max........................: 14      min=14               max=14
+
+    NETWORK
+    data_received..................: 200 MB  13 MB/s
+    data_sent......................: 199 MB  13 MB/s
+
+
+
+
+running (15.0s), 00/14 VUs, 902372 complete and 0 interrupted iterations
+create_subscriptions ✓ [ 100% ] 2 VUs   10s
+create_topics        ✓ [ 100% ] 2 VUs   10s
+publish_delivery     ✓ [ 100% ] 10 VUs  15s
