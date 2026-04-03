@@ -10,6 +10,7 @@ import (
 
 var ErrSubscriptionsHaveFullQueues = errors.New("message not delivered because subscriptions have full queues")
 var ErrTopicHasNoSubscriptions = errors.New("message not delivered because topic has no subscriptions")
+var ErrSubscriptionClosed = errors.New("subscription closed")
 
 type Topic struct {
 	Topic string `json:"topic"`
@@ -207,27 +208,21 @@ func (ps *PubSub) Publish(topic, msg string) error {
 	return nil
 }
 
-// Consume lets a subscription consume the first message in the queue
-func (ps *PubSub) Consume(topic string, subscription string) (string, error) {
-	ps.mutex.Lock()
-	defer ps.mutex.Unlock()
+// SubscriptionStream returns the buffered delivery channel for a subscription.
+func (ps *PubSub) SubscriptionStream(topic string, subscription string) (<-chan string, error) {
+	ps.mutex.RLock()
+	defer ps.mutex.RUnlock()
 
 	normalizedTopic := normalizeName(topic)
 	normalizedSubscription := normalizeName(subscription)
 	innerMap, ok := ps.topics[normalizedTopic]
 	if !ok {
-		return "", errors.New("topic not found: " + normalizedTopic)
+		return nil, errors.New("topic not found: " + normalizedTopic)
 	}
 	channel, ok := innerMap[normalizedSubscription]
 	if !ok {
-		return "", errors.New("subscription not found: " + normalizedSubscription)
+		return nil, errors.New("subscription not found: " + normalizedSubscription)
 	}
 
-	select {
-	case msg := <-channel:
-		return msg, nil
-	default:
-		return "", errors.New("message queue empty")
-	}
-
+	return channel, nil
 }

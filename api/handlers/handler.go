@@ -1,10 +1,12 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"pubsub-go/internal/services"
 
@@ -119,20 +121,52 @@ func PublishMessage(c *gin.Context) {
 	c.JSON(http.StatusCreated, newMessage)
 }
 
-func ConsumeMessage(c *gin.Context) {
-	var newSubscription services.Subscription
-	if err := c.ShouldBindJSON(&newSubscription); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	msg, err := ps.Consume(newSubscription.Topic, newSubscription.Subscription)
+func StreamMessages(c *gin.Context) {
+	topic := c.Query("topic")
+	subscription := c.Query("subscription")
+
+	stream, err := ps.SubscriptionStream(topic, subscription)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"error": err.Error(),
 		})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{
-		"message": msg,
-	})
+
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
+	c.Writer.WriteHeader(http.StatusOK)
+	c.Writer.WriteString(": connected\n\n")
+	c.Writer.Flush()
+
+	heartbeat := time.NewTicker(30 * time.Second)
+	defer heartbeat.Stop()
+
+	for {
+		select {
+		case <-c.Request.Context().Done():
+			return
+		case <-heartbeat.C:
+			c.Writer.WriteString(": keep-alive\n\n")
+			c.Writer.Flush()
+		case msg, ok := <-stream:
+			if !ok {
+				payload, _ := json.Marshal(gin.H{
+					"message": services.ErrSubscriptionClosed.Error(),
+				})
+				fmt.Fprintf(c.Writer, "event: error\ndata: %s\n\n", payload)
+				c.Writer.Flush()
+				return
+			}
+			payload, _ := json.Marshal(gin.H{
+				"topic":        strings.TrimSpace(topic),
+				"subscription": strings.TrimSpace(subscription),
+				"content":      msg,
+			})
+			fmt.Fprintf(c.Writer, "event: message\ndata: %s\n\n", payload)
+			c.Writer.Flush()
+		}
+	}
 }

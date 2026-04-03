@@ -7,14 +7,12 @@ const baseURL = __ENV.BASE_URL || 'http://localhost:8080';
 
 const createTopicVUs = Number(__ENV.CREATE_TOPIC_VUS || 2);
 const createSubscriptionVUs = Number(__ENV.CREATE_SUBSCRIPTION_VUS || 2);
-const publishConsumeVUs = Number(__ENV.PUBLISH_CONSUME_VUS || 10);
+const publishDeliveryVUs = Number(__ENV.PUBLISH_DELIVERY_VUS || 10);
 const totalScenarioVUs =
-  createTopicVUs + createSubscriptionVUs + publishConsumeVUs;
+  createTopicVUs + createSubscriptionVUs + publishDeliveryVUs;
 
 const publishSuccess = new Rate('publish_success');
-const consumeSuccess = new Rate('consume_success');
-const messageMatch = new Rate('message_match');
-const publishConsumeE2ELatency = new Trend('publish_consume_e2e_latency', true);
+const publishDeliveryLatency = new Trend('publish_delivery_latency', true);
 const publishBackpressure = new Counter('publish_backpressure');
 const publishTopicMissing = new Counter('publish_topic_missing');
 const publishUnexpectedFailure = new Counter('publish_unexpected_failure');
@@ -33,29 +31,27 @@ export const options = {
       vus: createSubscriptionVUs,
       duration: __ENV.CREATE_SUBSCRIPTION_DURATION || '10s',
     },
-    publish_consume: {
+    publish_delivery: {
       executor: 'constant-vus',
-      exec: 'publishAndConsume',
-      vus: publishConsumeVUs,
-      duration: __ENV.PUBLISH_CONSUME_DURATION || '15s',
+      exec: 'publishAndMeasureDeliveryBuffer',
+      vus: publishDeliveryVUs,
+      duration: __ENV.PUBLISH_DELIVERY_DURATION || '15s',
     },
   },
   thresholds: {
     http_req_duration: ['p(95)<200'],
     publish_success: ['rate>0.99'],
-    consume_success: ['rate>0.99'],
-    message_match: ['rate>0.99'],
   },
 };
 
 export function setup() {
   const runID = `run-${Date.now()}`;
 
-  // idInTest is global across scenarios, so pre-create enough publish/consume
+  // idInTest is global across scenarios, so pre-create enough publish/delivery
   // resources to cover the full VU id range used by this mixed-scenario run.
   for (let i = 1; i <= totalScenarioVUs; i++) {
-    const topic = `${runID}-pc-topic-${i}`;
-    const subscription = `${runID}-pc-sub-${i}`;
+    const topic = `${runID}-pd-topic-${i}`;
+    const subscription = `${runID}-pd-sub-${i}`;
 
     const createTopicResponse = postJSON('/topics', { topic });
     assertStatus(createTopicResponse, 201, 'setup create topic');
@@ -95,11 +91,10 @@ export function createSubscriptions(data) {
   assertStatus(createSubscriptionResponse, 201, 'create subscription');
 }
 
-export function publishAndConsume(data) {
+export function publishAndMeasureDeliveryBuffer(data) {
   const vu = exec.vu.idInTest;
   const iter = exec.scenario.iterationInTest;
-  const topic = `${data.runID}-pc-topic-${vu}`;
-  const subscription = `${data.runID}-pc-sub-${vu}`;
+  const topic = `${data.runID}-pd-topic-${vu}`;
   const content = `${data.runID}-msg-${vu}-${iter}`;
   const startedAt = Date.now();
 
@@ -136,32 +131,10 @@ export function publishAndConsume(data) {
       'publish failure is unexpected': (payload) =>
         !isBackpressure && !isTopicMissing,
     });
-    consumeSuccess.add(false);
-    messageMatch.add(false);
     return;
   }
 
-  const consumeResponse = postJSON('/consume', { topic, subscription });
-  const consumeOK = consumeResponse.status === 200;
-  consumeSuccess.add(consumeOK);
-  check(consumeResponse, {
-    'consume status is 200': (res) => res.status === 200,
-  });
-
-  if (!consumeOK) {
-    messageMatch.add(false);
-    return;
-  }
-
-  const body = safeJSON(consumeResponse);
-  const matched = check(body, {
-    'consume returned expected message': (payload) => payload.message === content,
-  });
-  messageMatch.add(matched);
-
-  if (matched) {
-    publishConsumeE2ELatency.add(Date.now() - startedAt);
-  }
+  publishDeliveryLatency.add(Date.now() - startedAt);
 }
 
 function postJSON(path, payload) {

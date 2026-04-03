@@ -1,12 +1,16 @@
 package handlers
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 
 	"pubsub-go/internal/services"
 
@@ -69,26 +73,33 @@ func BenchmarkPublishEndpoint(b *testing.B) {
 	}
 }
 
-func BenchmarkConsumeEndpoint(b *testing.B) {
+func BenchmarkStreamEndpointFirstEvent(b *testing.B) {
 	router := newBenchmarkRouter()
-	mustCreateTopicBenchmarkHTTP(b, "orders")
-	mustCreateSubscriptionBenchmarkHTTP(b, "orders", "alpha")
-
-	consumeBody := mustMarshalBenchmarkJSON(b, map[string]string{
-		"topic":        "orders",
-		"subscription": "alpha",
-	})
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		if err := ps.Publish("orders", "created"); err != nil {
+		ps = services.NewPubSub()
+		topic := fmt.Sprintf("orders-%d", i)
+		subscription := "alpha"
+		mustCreateTopicBenchmarkHTTP(b, topic)
+		mustCreateSubscriptionBenchmarkHTTP(b, topic, subscription)
+
+		server := httptest.NewServer(router)
+		streamResp, err := http.Get(server.URL + "/stream?topic=" + topic + "&subscription=" + subscription)
+		if err != nil {
+			b.Fatalf("opening stream failed: %v", err)
+		}
+
+		if err := ps.Publish(topic, "created"); err != nil {
 			b.Fatalf("Publish returned error: %v", err)
 		}
 
-		recorder := performBenchmarkRequest(router, http.MethodPost, "/consume", consumeBody)
-		if recorder.Code != http.StatusOK {
-			b.Fatalf("expected status %d, got %d", http.StatusOK, recorder.Code)
+		if _, err := readBenchmarkSSEEvent(streamResp.Body, 2*time.Second); err != nil {
+			b.Fatalf("reading SSE event failed: %v", err)
 		}
+
+		streamResp.Body.Close()
+		server.Close()
 	}
 }
 
@@ -100,7 +111,7 @@ func newBenchmarkRouter() *gin.Engine {
 	router.POST("/topics", CreateTopic)
 	router.POST("/subscriptions", CreateSubscription)
 	router.POST("/publish", PublishMessage)
-	router.POST("/consume", ConsumeMessage)
+	router.GET("/stream", StreamMessages)
 	return router
 }
 
@@ -144,8 +155,30 @@ func drainBenchmarkSubscriptions(b *testing.B, topic string, subscriberCount int
 
 	for i := 0; i < subscriberCount; i++ {
 		subscription := fmt.Sprintf("sub-%d", i)
-		if _, err := ps.Consume(topic, subscription); err != nil {
-			b.Fatalf("Consume(%q) returned error: %v", subscription, err)
+		stream, err := ps.SubscriptionStream(topic, subscription)
+		if err != nil {
+			b.Fatalf("SubscriptionStream(%q, %q) returned error: %v", topic, subscription, err)
+		}
+		if _, ok := <-stream; !ok {
+			b.Fatalf("subscription stream %q closed unexpectedly", subscription)
 		}
 	}
+}
+
+func readBenchmarkSSEEvent(body io.Reader, timeout time.Duration) (string, error) {
+	reader := bufio.NewReader(body)
+	deadline := time.Now().Add(timeout)
+
+	for time.Now().Before(deadline) {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return "", err
+		}
+
+		if strings.HasPrefix(line, "data: ") {
+			return strings.TrimSpace(strings.TrimPrefix(line, "data: ")), nil
+		}
+	}
+
+	return "", fmt.Errorf("timed out waiting for SSE event")
 }

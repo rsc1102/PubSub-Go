@@ -77,10 +77,7 @@ func TestSubscribePublishAndConsume(t *testing.T) {
 
 	ps.Publish("orders", "created")
 
-	msg, err := ps.Consume("orders", "alpha")
-	if err != nil {
-		t.Fatalf("Consume returned error: %v", err)
-	}
+	msg := mustReadNextMessage(t, ps, "orders", "alpha")
 	if msg != "created" {
 		t.Fatalf("expected message %q, got %q", "created", msg)
 	}
@@ -99,10 +96,7 @@ func TestPublishFansOutToAllSubscribers(t *testing.T) {
 	ps.Publish("orders", "created")
 
 	for _, subscription := range []string{"alpha", "beta"} {
-		msg, err := ps.Consume("orders", subscription)
-		if err != nil {
-			t.Fatalf("Consume(%q) returned error: %v", subscription, err)
-		}
+		msg := mustReadNextMessage(t, ps, "orders", subscription)
 		if msg != "created" {
 			t.Fatalf("expected fan-out message %q for %s, got %q", "created", subscription, msg)
 		}
@@ -163,8 +157,8 @@ func TestUnsubscribeRemovesSubscription(t *testing.T) {
 		t.Fatalf("Unsubscribe returned error: %v", err)
 	}
 
-	if _, err := ps.Consume("orders", "alpha"); err == nil {
-		t.Fatal("expected consume on removed subscription to fail")
+	if _, err := ps.SubscriptionStream("orders", "alpha"); err == nil {
+		t.Fatal("expected stream lookup on removed subscription to fail")
 	}
 }
 
@@ -185,15 +179,15 @@ func TestDeleteTopicRemovesTopicAndSubscriptions(t *testing.T) {
 	}
 }
 
-func TestConsumeReturnsErrorWhenQueueIsEmpty(t *testing.T) {
+func TestSubscriptionStreamStartsEmpty(t *testing.T) {
 	ps := NewPubSub()
 	mustCreateTopic(t, ps, "orders")
 	if err := ps.Subscribe("orders", "alpha"); err != nil {
 		t.Fatalf("Subscribe returned error: %v", err)
 	}
 
-	if _, err := ps.Consume("orders", "alpha"); err == nil {
-		t.Fatal("expected empty queue consume to fail")
+	if _, ok := readQueuedMessage(ps, "orders", "alpha"); ok {
+		t.Fatal("expected subscription buffer to start empty")
 	}
 }
 
@@ -274,8 +268,8 @@ func TestPublishQueueFullDeliversToNoSubscribers(t *testing.T) {
 		}
 	}
 
-	if _, err := ps.Consume("orders", "beta"); err != nil {
-		t.Fatalf("expected beta consume before saturation check to succeed, got %v", err)
+	if _, ok := readQueuedMessage(ps, "orders", "beta"); !ok {
+		t.Fatal("expected beta stream to have a queued message before saturation check")
 	}
 
 	if err := ps.Publish("orders", "overflow"); err == nil {
@@ -290,15 +284,12 @@ func TestPublishQueueFullDeliversToNoSubscribers(t *testing.T) {
 		{subscription: "beta", remaining: defaultQueueCapacity - 1},
 	} {
 		for i := 0; i < tc.remaining; i++ {
-			msg, err := ps.Consume("orders", tc.subscription)
-			if err != nil {
-				t.Fatalf("Consume(%q) returned error: %v", tc.subscription, err)
-			}
+			msg := mustReadNextMessage(t, ps, "orders", tc.subscription)
 			if msg != "created" {
 				t.Fatalf("expected queued message %q for %s, got %q", "created", tc.subscription, msg)
 			}
 		}
-		if _, err := ps.Consume("orders", tc.subscription); err == nil {
+		if _, ok := readQueuedMessage(ps, "orders", tc.subscription); ok {
 			t.Fatalf("expected no overflow message to be delivered to %s", tc.subscription)
 		}
 	}
@@ -342,10 +333,7 @@ func TestPublishTrimsTopicNameLikeCreateTopic(t *testing.T) {
 		t.Fatalf("expected publish with original spaced topic name to succeed, got %v", err)
 	}
 
-	msg, err := ps.Consume("orders", "alpha")
-	if err != nil {
-		t.Fatalf("Consume returned error: %v", err)
-	}
+	msg := mustReadNextMessage(t, ps, "orders", "alpha")
 	if msg != "created" {
 		t.Fatalf("expected message %q, got %q", "created", msg)
 	}
@@ -370,5 +358,38 @@ func mustCreateTopic(t *testing.T, ps *PubSub, topic string) {
 
 	if err := ps.CreateTopic(topic); err != nil {
 		t.Fatalf("CreateTopic(%q) returned error: %v", topic, err)
+	}
+}
+
+func mustReadNextMessage(t *testing.T, ps *PubSub, topic, subscription string) string {
+	t.Helper()
+
+	stream, err := ps.SubscriptionStream(topic, subscription)
+	if err != nil {
+		t.Fatalf("SubscriptionStream(%q, %q) returned error: %v", topic, subscription, err)
+	}
+
+	msg, ok := <-stream
+	if !ok {
+		t.Fatalf("subscription stream %q closed unexpectedly", subscription)
+	}
+
+	return msg
+}
+
+func readQueuedMessage(ps *PubSub, topic, subscription string) (string, bool) {
+	stream, err := ps.SubscriptionStream(topic, subscription)
+	if err != nil {
+		return "", false
+	}
+
+	select {
+	case msg, ok := <-stream:
+		if !ok {
+			return "", false
+		}
+		return msg, true
+	default:
+		return "", false
 	}
 }

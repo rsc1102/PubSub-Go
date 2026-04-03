@@ -37,9 +37,7 @@ func BenchmarkConsume(b *testing.B) {
 		if err := ps.Publish("orders", "created"); err != nil {
 			b.Fatalf("Publish returned error: %v", err)
 		}
-		if _, err := ps.Consume("orders", "alpha"); err != nil {
-			b.Fatalf("Consume returned error: %v", err)
-		}
+		drainNextMessageBenchmark(b, ps, "orders", "alpha")
 	}
 }
 
@@ -84,9 +82,7 @@ func BenchmarkPublishConsumeParallel(b *testing.B) {
 			if err := ps.Publish(topic, "created"); err != nil {
 				b.Fatalf("Publish(%q) returned error: %v", topic, err)
 			}
-			if _, err := ps.Consume(topic, "alpha"); err != nil {
-				b.Fatalf("Consume(%q) returned error: %v", topic, err)
-			}
+			drainNextMessageBenchmark(b, ps, topic, "alpha")
 		}
 	})
 }
@@ -96,9 +92,7 @@ func drainAllSubscriptions(b *testing.B, ps *PubSub, topic string, subscriberCou
 
 	for i := 0; i < subscriberCount; i++ {
 		subscription := fmt.Sprintf("sub-%d", i)
-		if _, err := ps.Consume(topic, subscription); err != nil {
-			b.Fatalf("Consume(%q) returned error: %v", subscription, err)
-		}
+		drainNextMessageBenchmark(b, ps, topic, subscription)
 	}
 }
 
@@ -106,11 +100,8 @@ func drainSubscription(b *testing.B, ps *PubSub, topic, subscription string) {
 	b.Helper()
 
 	for {
-		if _, err := ps.Consume(topic, subscription); err != nil {
-			if err.Error() == "message queue empty" {
-				return
-			}
-			b.Fatalf("Consume(%q) returned error: %v", subscription, err)
+		if _, ok := tryReadQueuedMessageBenchmark(b, ps, topic, subscription); !ok {
+			return
 		}
 	}
 }
@@ -128,5 +119,40 @@ func mustSubscribeBenchmark(b *testing.B, ps *PubSub, topic, subscription string
 
 	if err := ps.Subscribe(topic, subscription); err != nil {
 		b.Fatalf("Subscribe(%q, %q) returned error: %v", topic, subscription, err)
+	}
+}
+
+func drainNextMessageBenchmark(b *testing.B, ps *PubSub, topic, subscription string) string {
+	b.Helper()
+
+	stream, err := ps.SubscriptionStream(topic, subscription)
+	if err != nil {
+		b.Fatalf("SubscriptionStream(%q, %q) returned error: %v", topic, subscription, err)
+	}
+
+	msg, ok := <-stream
+	if !ok {
+		b.Fatalf("subscription stream %q closed unexpectedly", subscription)
+	}
+
+	return msg
+}
+
+func tryReadQueuedMessageBenchmark(b *testing.B, ps *PubSub, topic, subscription string) (string, bool) {
+	b.Helper()
+
+	stream, err := ps.SubscriptionStream(topic, subscription)
+	if err != nil {
+		b.Fatalf("SubscriptionStream(%q, %q) returned error: %v", topic, subscription, err)
+	}
+
+	select {
+	case msg, ok := <-stream:
+		if !ok {
+			b.Fatalf("subscription stream %q closed unexpectedly", subscription)
+		}
+		return msg, true
+	default:
+		return "", false
 	}
 }
