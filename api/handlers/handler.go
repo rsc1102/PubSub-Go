@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -102,7 +103,11 @@ func PublishMessage(c *gin.Context) {
 		return
 	}
 	if err := ps.Publish(newMessage.Topic, newMessage.Content); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
+		status := http.StatusBadRequest
+		if errors.Is(err, services.ErrSubscriptionsHaveFullQueues) {
+			status = http.StatusTooManyRequests
+		}
+		c.JSON(status, gin.H{
 			"error": err.Error(),
 		})
 		return

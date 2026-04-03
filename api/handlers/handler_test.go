@@ -114,6 +114,30 @@ func TestPublishEndpointRequiresExistingTopic(t *testing.T) {
 	}
 }
 
+func TestPublishEndpointReturnsTooManyRequestsForFullSubscriptionQueues(t *testing.T) {
+	router := newTestRouter()
+	ps = services.NewPubSub(1)
+	mustCreateTopicHTTP(t, "orders")
+	mustCreateSubscriptionHTTP(t, "orders", "alpha")
+
+	firstResp := performJSONRequest(t, router, http.MethodPost, "/publish", map[string]string{
+		"topic":   "orders",
+		"content": "created",
+	})
+	if firstResp.Code != http.StatusCreated {
+		t.Fatalf("expected first publish status %d, got %d", http.StatusCreated, firstResp.Code)
+	}
+
+	secondResp := performJSONRequest(t, router, http.MethodPost, "/publish", map[string]string{
+		"topic":   "orders",
+		"content": "created-again",
+	})
+
+	if secondResp.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected status %d, got %d", http.StatusTooManyRequests, secondResp.Code)
+	}
+}
+
 func TestCreateSubscriptionEndpointRejectsDuplicateName(t *testing.T) {
 	router := newTestRouter()
 	ps = services.NewPubSub()

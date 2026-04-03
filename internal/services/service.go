@@ -7,6 +7,8 @@ import (
 	"sync"
 )
 
+var ErrSubscriptionsHaveFullQueues = errors.New("message not delivered because subscriptions have full queues")
+
 type Topic struct {
 	Topic string `json:"topic"`
 }
@@ -187,7 +189,7 @@ func (ps *PubSub) Publish(topic, msg string) error {
 	}
 
 	if len(fullSubscriptions) > 0 {
-		return fmt.Errorf("message not delivered because subscriptions have full queues: %s", strings.Join(fullSubscriptions, ", "))
+		return fmt.Errorf("%w: %s", ErrSubscriptionsHaveFullQueues, strings.Join(fullSubscriptions, ", "))
 	}
 
 	for _, ch := range subscriptions {
