@@ -189,6 +189,85 @@ func TestSubscribeRejectsDuplicateSubscriptionName(t *testing.T) {
 	}
 }
 
+func TestSubscribeRejectsEmptySubscriptionName(t *testing.T) {
+	ps := NewPubSub()
+	mustCreateTopic(t, ps, "orders")
+
+	if err := ps.Subscribe("orders", ""); err == nil {
+		t.Fatal("expected empty subscription name to fail")
+	}
+}
+
+func TestSubscribeRejectsWhitespaceOnlySubscriptionName(t *testing.T) {
+	ps := NewPubSub()
+	mustCreateTopic(t, ps, "orders")
+
+	if err := ps.Subscribe("orders", "   "); err == nil {
+		t.Fatal("expected whitespace-only subscription name to fail")
+	}
+}
+
+func TestPublishReturnsErrorWhenSubscriberQueueIsFull(t *testing.T) {
+	ps := NewPubSub()
+	mustCreateTopic(t, ps, "orders")
+	if err := ps.Subscribe("orders", "alpha"); err != nil {
+		t.Fatalf("Subscribe returned error: %v", err)
+	}
+
+	for i := 0; i < 3; i++ {
+		if err := ps.Publish("orders", "created"); err != nil {
+			t.Fatalf("Publish returned error before queue was full: %v", err)
+		}
+	}
+
+	if err := ps.Publish("orders", "overflow"); err == nil {
+		t.Fatal("expected publish to fail when subscriber queue is full")
+	}
+}
+
+func TestSubscribeTrimsTopicNameLikeCreateTopic(t *testing.T) {
+	ps := NewPubSub()
+	mustCreateTopic(t, ps, " orders ")
+
+	if err := ps.Subscribe(" orders ", "alpha"); err != nil {
+		t.Fatalf("expected subscribe with original spaced topic name to succeed, got %v", err)
+	}
+}
+
+func TestPublishTrimsTopicNameLikeCreateTopic(t *testing.T) {
+	ps := NewPubSub()
+	mustCreateTopic(t, ps, " orders ")
+	if err := ps.Subscribe("orders", "alpha"); err != nil {
+		t.Fatalf("Subscribe returned error: %v", err)
+	}
+
+	if err := ps.Publish(" orders ", "created"); err != nil {
+		t.Fatalf("expected publish with original spaced topic name to succeed, got %v", err)
+	}
+
+	msg, err := ps.Consume("orders", "alpha")
+	if err != nil {
+		t.Fatalf("Consume returned error: %v", err)
+	}
+	if msg != "created" {
+		t.Fatalf("expected message %q, got %q", "created", msg)
+	}
+}
+
+func TestDeleteTopicTrimsNameLikeCreateTopic(t *testing.T) {
+	ps := NewPubSub()
+	mustCreateTopic(t, ps, " orders ")
+
+	ps.DeleteTopic(" orders ")
+
+	if _, err := ps.GetSubscriptions("orders"); err == nil {
+		t.Fatal("expected delete with original spaced topic name to remove normalized topic")
+	}
+	if topics := ps.GetTopics(); len(topics) != 0 {
+		t.Fatalf("expected no topics after delete, got %v", topics)
+	}
+}
+
 func mustCreateTopic(t *testing.T, ps *PubSub, topic string) {
 	t.Helper()
 

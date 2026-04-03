@@ -130,6 +130,35 @@ func TestCreateSubscriptionEndpointRejectsDuplicateName(t *testing.T) {
 	}
 }
 
+func TestCreateSubscriptionEndpointRejectsMissingSubscriptionName(t *testing.T) {
+	router := newTestRouter()
+	ps = services.NewPubSub()
+	mustCreateTopicHTTP(t, "orders")
+
+	resp := performJSONRequest(t, router, http.MethodPost, "/subscriptions", map[string]string{
+		"topic": "orders",
+	})
+
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, resp.Code)
+	}
+}
+
+func TestCreateSubscriptionEndpointRejectsWhitespaceOnlySubscriptionName(t *testing.T) {
+	router := newTestRouter()
+	ps = services.NewPubSub()
+	mustCreateTopicHTTP(t, "orders")
+
+	resp := performJSONRequest(t, router, http.MethodPost, "/subscriptions", map[string]string{
+		"topic":        "orders",
+		"subscription": "   ",
+	})
+
+	if resp.Code != http.StatusBadRequest {
+		t.Fatalf("expected status %d, got %d", http.StatusBadRequest, resp.Code)
+	}
+}
+
 func TestConsumeEndpointReturnsBadRequestForEmptyQueue(t *testing.T) {
 	router := newTestRouter()
 	ps = services.NewPubSub()
