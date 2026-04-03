@@ -16,77 +16,77 @@
               * publish_consume: 10 looping VUs for 15s (exec: publishAndConsume, gracefulStop: 30s)
 
 
-running (01.0s), 14/14 VUs, 22188 complete and 0 interrupted iterations
+running (01.0s), 14/14 VUs, 20942 complete and 0 interrupted iterations
 create_subscriptions   [  10% ] 2 VUs   01.0s/10s
 create_topics          [  10% ] 2 VUs   01.0s/10s
 publish_consume        [   7% ] 10 VUs  01.0s/15s
 
-running (02.0s), 14/14 VUs, 45224 complete and 0 interrupted iterations
+running (02.0s), 14/14 VUs, 42196 complete and 0 interrupted iterations
 create_subscriptions   [  20% ] 2 VUs   02.0s/10s
 create_topics          [  20% ] 2 VUs   02.0s/10s
 publish_consume        [  13% ] 10 VUs  02.0s/15s
 
-running (03.0s), 14/14 VUs, 69078 complete and 0 interrupted iterations
+running (03.0s), 14/14 VUs, 66686 complete and 0 interrupted iterations
 create_subscriptions   [  30% ] 2 VUs   03.0s/10s
 create_topics          [  30% ] 2 VUs   03.0s/10s
 publish_consume        [  20% ] 10 VUs  03.0s/15s
 
-running (04.0s), 14/14 VUs, 94839 complete and 0 interrupted iterations
+running (04.0s), 14/14 VUs, 91477 complete and 0 interrupted iterations
 create_subscriptions   [  40% ] 2 VUs   04.0s/10s
 create_topics          [  40% ] 2 VUs   04.0s/10s
 publish_consume        [  27% ] 10 VUs  04.0s/15s
 
-running (05.0s), 14/14 VUs, 120001 complete and 0 interrupted iterations
+running (05.0s), 14/14 VUs, 117636 complete and 0 interrupted iterations
 create_subscriptions   [  50% ] 2 VUs   05.0s/10s
 create_topics          [  50% ] 2 VUs   05.0s/10s
 publish_consume        [  33% ] 10 VUs  05.0s/15s
 
-running (06.0s), 14/14 VUs, 145264 complete and 0 interrupted iterations
+running (06.0s), 14/14 VUs, 142526 complete and 0 interrupted iterations
 create_subscriptions   [  60% ] 2 VUs   06.0s/10s
 create_topics          [  60% ] 2 VUs   06.0s/10s
 publish_consume        [  40% ] 10 VUs  06.0s/15s
 
-running (07.0s), 14/14 VUs, 170658 complete and 0 interrupted iterations
+running (07.0s), 14/14 VUs, 167608 complete and 0 interrupted iterations
 create_subscriptions   [  70% ] 2 VUs   07.0s/10s
 create_topics          [  70% ] 2 VUs   07.0s/10s
 publish_consume        [  47% ] 10 VUs  07.0s/15s
 
-running (08.0s), 14/14 VUs, 194915 complete and 0 interrupted iterations
+running (08.0s), 14/14 VUs, 193839 complete and 0 interrupted iterations
 create_subscriptions   [  80% ] 2 VUs   08.0s/10s
 create_topics          [  80% ] 2 VUs   08.0s/10s
 publish_consume        [  53% ] 10 VUs  08.0s/15s
 
-running (09.0s), 14/14 VUs, 220548 complete and 0 interrupted iterations
+running (09.0s), 14/14 VUs, 218474 complete and 0 interrupted iterations
 create_subscriptions   [  90% ] 2 VUs   09.0s/10s
 create_topics          [  90% ] 2 VUs   09.0s/10s
 publish_consume        [  60% ] 10 VUs  09.0s/15s
 
-running (10.0s), 14/14 VUs, 246075 complete and 0 interrupted iterations
+running (10.0s), 14/14 VUs, 245369 complete and 0 interrupted iterations
 create_subscriptions   [ 100% ] 2 VUs   10.0s/10s
 create_topics          [ 100% ] 2 VUs   10.0s/10s
 publish_consume        [  67% ] 10 VUs  10.0s/15s
 
-running (11.0s), 10/14 VUs, 267112 complete and 0 interrupted iterations
+running (11.0s), 10/14 VUs, 267154 complete and 0 interrupted iterations
 create_subscriptions ✓ [ 100% ] 2 VUs   10s
 create_topics        ✓ [ 100% ] 2 VUs   10s
 publish_consume        [  73% ] 10 VUs  11.0s/15s
 
-running (12.0s), 10/14 VUs, 287394 complete and 0 interrupted iterations
+running (12.0s), 10/14 VUs, 284744 complete and 0 interrupted iterations
 create_subscriptions ✓ [ 100% ] 2 VUs   10s
 create_topics        ✓ [ 100% ] 2 VUs   10s
 publish_consume        [  80% ] 10 VUs  12.0s/15s
 
-running (13.0s), 10/14 VUs, 306655 complete and 0 interrupted iterations
+running (13.0s), 10/14 VUs, 301891 complete and 0 interrupted iterations
 create_subscriptions ✓ [ 100% ] 2 VUs   10s
 create_topics        ✓ [ 100% ] 2 VUs   10s
 publish_consume        [  87% ] 10 VUs  13.0s/15s
 
-running (14.0s), 10/14 VUs, 327795 complete and 0 interrupted iterations
+running (14.0s), 10/14 VUs, 322352 complete and 0 interrupted iterations
 create_subscriptions ✓ [ 100% ] 2 VUs   10s
 create_topics        ✓ [ 100% ] 2 VUs   10s
 publish_consume        [  93% ] 10 VUs  14.0s/15s
 
-running (15.0s), 10/14 VUs, 347959 complete and 0 interrupted iterations
+running (15.0s), 10/14 VUs, 341525 complete and 0 interrupted iterations
 create_subscriptions ✓ [ 100% ] 2 VUs   10s
 create_topics        ✓ [ 100% ] 2 VUs   10s
 publish_consume        [ 100% ] 10 VUs  15.0s/15s
@@ -94,51 +94,60 @@ publish_consume        [ 100% ] 10 VUs  15.0s/15s
 
   █ THRESHOLDS 
 
-    http_req_duration
-    ✓ 'p(95)<200' p(95)=508µs
+    consume_success
+    ✓ 'rate>0.99' rate=100.00%
 
-    http_req_failed
-    ✗ 'rate<0.01' rate=16.08%
+    http_req_duration
+    ✓ 'p(95)<200' p(95)=503µs
+
+    message_match
+    ✓ 'rate>0.99' rate=100.00%
+
+    publish_success
+    ✓ 'rate>0.99' rate=100.00%
 
 
   █ TOTAL RESULTS 
 
-    checks_total.......: 891903 59430.377836/s
-    checks_succeeded...: 82.79% 738480 out of 891903
-    checks_failed......: 17.20% 153423 out of 891903
+    checks_total.......: 872035  58105.130484/s
+    checks_succeeded...: 100.00% 872035 out of 872035
+    checks_failed......: 0.00%   0 out of 872035
 
     ✓ setup create topic status is 201
     ✓ setup create subscription status is 201
-    ✗ publish status is 201
-      ↳  80% — ✓ 204722 / ✗ 51141
     ✓ create topic for subscription status is 201
-    ✓ create topic status is 201
-    ✗ consume status is 200
-      ↳  80% — ✓ 204722 / ✗ 51141
+    ✓ publish status is 201
     ✓ create subscription status is 201
-    ✗ consume returned expected message
-      ↳  80% — ✓ 204722 / ✗ 51141
+    ✓ create topic status is 201
+    ✓ consume status is 200
+    ✓ consume returned expected message
+
+    CUSTOM
+    consume_success................: 100.00% 249137 out of 249137
+    message_match..................: 100.00% 249137 out of 249137
+    publish_consume_e2e_latency....: avg=566.05µs min=0s     med=0s       max=34ms    p(90)=1ms      p(95)=1ms   
+    publish_success................: 100.00% 249137 out of 249137
 
     HTTP
-    http_req_duration..............: avg=218.32µs min=25µs   med=153µs    max=30.17ms p(90)=376µs    p(95)=508µs 
-      { expected_response:true }...: avg=219.45µs min=25µs   med=154µs    max=30.17ms p(90)=378µs    p(95)=510µs 
-    http_req_failed................: 16.08% 102282 out of 636040
-    http_reqs......................: 636040 42381.39968/s
+    http_req_duration..............: avg=221.04µs min=27µs   med=158µs    max=33.7ms  p(90)=375µs    p(95)=503µs 
+      { expected_response:true }...: avg=221.04µs min=27µs   med=158µs    max=33.7ms  p(90)=375µs    p(95)=503µs 
+    http_req_failed................: 0.00%   0 out of 622898
+    http_reqs......................: 622898  41504.721219/s
 
     EXECUTION
-    iteration_duration.............: avg=539.4µs  min=47.2µs med=408.62µs max=37.33ms p(90)=857.82µs p(95)=1.14ms
-    iterations.....................: 348314 23209.286913/s
-    vus............................: 10     min=10               max=14
-    vus_max........................: 14     min=14               max=14
+    iteration_duration.............: avg=550.11µs min=48.7µs med=424.54µs max=34.45ms p(90)=862.29µs p(95)=1.15ms
+    iterations.....................: 341816  22775.76391/s
+    vus............................: 10      min=10               max=14
+    vus_max........................: 14      min=14               max=14
 
     NETWORK
-    data_received..................: 122 MB 8.1 MB/s
-    data_sent......................: 133 MB 8.9 MB/s
+    data_received..................: 119 MB  7.9 MB/s
+    data_sent......................: 130 MB  8.7 MB/s
 
 
 
 
-running (15.0s), 00/14 VUs, 348314 complete and 0 interrupted iterations
+running (15.0s), 00/14 VUs, 341816 complete and 0 interrupted iterations
 create_subscriptions ✓ [ 100% ] 2 VUs   10s
 create_topics        ✓ [ 100% ] 2 VUs   10s
 publish_consume      ✓ [ 100% ] 10 VUs  15s

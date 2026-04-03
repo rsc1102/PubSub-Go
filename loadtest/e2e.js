@@ -1,18 +1,23 @@
 import http from 'k6/http';
 import exec from 'k6/execution';
 import { check } from 'k6';
-import { Counter, Rate } from 'k6/metrics';
+import { Counter, Rate, Trend } from 'k6/metrics';
 
 const baseURL = __ENV.BASE_URL || 'http://localhost:8080';
 
 const createTopicVUs = Number(__ENV.CREATE_TOPIC_VUS || 2);
 const createSubscriptionVUs = Number(__ENV.CREATE_SUBSCRIPTION_VUS || 2);
 const publishConsumeVUs = Number(__ENV.PUBLISH_CONSUME_VUS || 10);
+const totalScenarioVUs =
+  createTopicVUs + createSubscriptionVUs + publishConsumeVUs;
 
 const publishSuccess = new Rate('publish_success');
 const consumeSuccess = new Rate('consume_success');
 const messageMatch = new Rate('message_match');
+const publishConsumeE2ELatency = new Trend('publish_consume_e2e_latency', true);
 const publishBackpressure = new Counter('publish_backpressure');
+const publishTopicMissing = new Counter('publish_topic_missing');
+const publishUnexpectedFailure = new Counter('publish_unexpected_failure');
 
 export const options = {
   scenarios: {
@@ -46,7 +51,9 @@ export const options = {
 export function setup() {
   const runID = `run-${Date.now()}`;
 
-  for (let i = 1; i <= publishConsumeVUs; i++) {
+  // idInTest is global across scenarios, so pre-create enough publish/consume
+  // resources to cover the full VU id range used by this mixed-scenario run.
+  for (let i = 1; i <= totalScenarioVUs; i++) {
     const topic = `${runID}-pc-topic-${i}`;
     const subscription = `${runID}-pc-sub-${i}`;
 
@@ -94,6 +101,7 @@ export function publishAndConsume(data) {
   const topic = `${data.runID}-pc-topic-${vu}`;
   const subscription = `${data.runID}-pc-sub-${vu}`;
   const content = `${data.runID}-msg-${vu}-${iter}`;
+  const startedAt = Date.now();
 
   const publishResponse = postJSON('/publish', { topic, content });
   const publishOK = publishResponse.status === 201;
@@ -104,17 +112,29 @@ export function publishAndConsume(data) {
 
   if (!publishOK) {
     const body = safeJSON(publishResponse);
+    const errorMessage = typeof body.error === 'string' ? body.error : '';
     const isBackpressure =
       publishResponse.status === 429 &&
-      typeof body.error === 'string' &&
-      body.error.includes('full queues');
+      errorMessage.includes('full queues');
+    const isTopicMissing =
+      publishResponse.status === 400 &&
+      errorMessage.includes('topic not found');
 
     if (isBackpressure) {
       publishBackpressure.add(1);
     }
+    if (isTopicMissing) {
+      publishTopicMissing.add(1);
+    }
+    if (!isBackpressure && !isTopicMissing) {
+      publishUnexpectedFailure.add(1);
+    }
 
     check(body, {
       'publish failure is queue backpressure': (payload) => isBackpressure,
+      'publish failure is missing topic': (payload) => isTopicMissing,
+      'publish failure is unexpected': (payload) =>
+        !isBackpressure && !isTopicMissing,
     });
     consumeSuccess.add(false);
     messageMatch.add(false);
@@ -138,6 +158,10 @@ export function publishAndConsume(data) {
     'consume returned expected message': (payload) => payload.message === content,
   });
   messageMatch.add(matched);
+
+  if (matched) {
+    publishConsumeE2ELatency.add(Date.now() - startedAt);
+  }
 }
 
 function postJSON(path, payload) {

@@ -13,6 +13,10 @@ import (
 
 var ps = services.NewPubSub()
 
+func Initialize(queueSize int) {
+	ps = services.NewPubSub(queueSize)
+}
+
 func HealthCheck(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"message": "pong",
