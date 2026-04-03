@@ -1,8 +1,8 @@
 # PubSub Go
 
-This project is an in-memory Pub/Sub (Publish/Subscribe) message broker implemented in Go (Golang). The broker supports a fan-out model for topic-based message delivery. Communication with the message broker is facilitated through a REST API, making it accessible and easy to integrate with other services. Messages are enqueued independently for each subscriber. Publishing uses all-or-nothing delivery: a publish request succeeds only when the topic exists, has at least one subscription, and every subscriber queue can accept the message. If any subscriber queue is full, the publish request fails and the message is not enqueued for any subscriber.
+This project is an in-memory Pub/Sub message broker written in Go. It uses a fan-out model for topic-based delivery and exposes a REST API for integration. Messages are queued separately for each subscriber. Publishing is all-or-nothing: it succeeds only if the topic exists, has at least one subscription, and every subscriber queue has room. If any queue is full, the publish fails and nothing is enqueued.
 
-By default, each subscription has a queue capacity of `10` messages. When running the HTTP server, you can override this with the `-queue-size` flag, for example `go run main.go -queue-size 100`. Code that embeds the service directly can override it by constructing the broker with `services.NewPubSub(customCapacity)`.
+Each subscription defaults to a queue capacity of `10` messages. When running the HTTP server, override it with `-queue-size`, for example `go run main.go -queue-size 100`. If you embed the service directly, pass a custom capacity to `services.NewPubSub(...)`.
 
 ```mermaid
 flowchart TD
