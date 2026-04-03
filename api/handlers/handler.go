@@ -100,7 +100,12 @@ func PublishMessage(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	ps.Publish(newMessage.Topic, newMessage.Content)
+	if err := ps.Publish(newMessage.Topic, newMessage.Content); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": err.Error(),
+		})
+		return
+	}
 	c.JSON(http.StatusCreated, newMessage)
 }
 

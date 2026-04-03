@@ -3,6 +3,7 @@ package services
 import (
 	"errors"
 	"log"
+	"strings"
 	"sync"
 )
 
@@ -49,12 +50,17 @@ func (ps *PubSub) CreateTopic(topic string) error {
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
 
-	if _, exists := ps.topics[topic]; !exists && topic != "" {
-		ps.topics[topic] = make(map[string]chan string)
-		return nil
-	} else {
-		return errors.New("topic already exists:" + topic)
+	normalizedTopic := strings.TrimSpace(topic)
+	if normalizedTopic == "" {
+		return errors.New("topic name cannot be empty")
 	}
+
+	if _, exists := ps.topics[normalizedTopic]; exists {
+		return errors.New("topic already exists: " + normalizedTopic)
+	}
+
+	ps.topics[normalizedTopic] = make(map[string]chan string)
+	return nil
 }
 
 // Delete a topic
@@ -109,6 +115,9 @@ func (ps *PubSub) Subscribe(topic string, subscription string) error {
 	if !ok {
 		return errors.New("topic not found: " + topic)
 	}
+	if _, exists := innerMap[subscription]; exists {
+		return errors.New("subscription already exists: " + subscription)
+	}
 
 	ch := make(chan string, 3) // Buffered channel with a capacity of 10
 	innerMap[subscription] = ch
@@ -134,20 +143,24 @@ func (ps *PubSub) Unsubscribe(topic string, subscription string) error {
 }
 
 // Publish sends a message to all subscriptions of a specific topic
-func (ps *PubSub) Publish(topic, msg string) {
+func (ps *PubSub) Publish(topic, msg string) error {
 	ps.mutex.Lock()
 	defer ps.mutex.Unlock()
 
 	subscriptions, ok := ps.topics[topic]
-	if ok {
-		for sub, ch := range subscriptions {
-			select {
-			case ch <- msg:
-			default:
-				log.Printf("Skipping publishing message to subscription %s as channel is full\n", sub)
-			}
+	if !ok {
+		return errors.New("topic not found: " + topic)
+	}
+
+	for sub, ch := range subscriptions {
+		select {
+		case ch <- msg:
+		default:
+			log.Printf("Skipping publishing message to subscription %s as channel is full\n", sub)
 		}
 	}
+
+	return nil
 }
 
 // Consume lets a subscription consume the first message in the queue
